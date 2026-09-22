@@ -9,7 +9,7 @@ const n = (v: number) => v.toLocaleString()
 function BucketTable({ rows, label }: { rows: UsageBucket[]; label: string }) {
   if (!rows.length) return null
   return (
-    <table style={{ marginBottom: 14 }}>
+    <table className="aligned" style={{ marginBottom: 14 }}>
       <thead>
         <tr>
           <th>{label}</th>

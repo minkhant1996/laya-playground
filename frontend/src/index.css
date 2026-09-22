@@ -76,3 +76,6 @@ pre { font-size: 12px; overflow: auto; background: #0d0f14; padding: 10px; borde
 .composer { display: flex; gap: 8px; margin-top: 10px; }
 .composer textarea { min-height: 44px; resize: vertical; }
 .suggest { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+table.aligned { table-layout: fixed; }
+table.aligned th:first-child, table.aligned td:first-child { width: 30%; }
+table.aligned th:not(:first-child), table.aligned td:not(:first-child) { text-align: right; }
