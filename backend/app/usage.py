@@ -32,7 +32,7 @@ def record(*, purpose: str, engine: str, model: str | None, input_tokens: int | 
         "latency_ms": round(latency_ms, 1) if latency_ms is not None else None, "ok": ok, "error": (error or None) and str(error)[:300],
     }
     if extra:
-        entry.update(extra)
+        entry.update(extra)   # may override cost_usd with the provider-reported cost
     with _lock:
         LOG.parent.mkdir(parents=True, exist_ok=True)
         with LOG.open("a") as f:

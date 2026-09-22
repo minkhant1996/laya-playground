@@ -7,7 +7,7 @@ Frontend (Vite + React + TypeScript) and backend (FastAPI) around the
   want to decide, turns it into typed questions (`choice`, `score`, `noul`), runs the decision
   model, and explains the answers. An *Advanced* panel exposes the raw state/questions JSON.
 - **Decision model** – Laya (local), any OpenRouter LLM (answers the same typed questions), or
-  TypeSafe's hosted **Jev** via its API. Chosen in Settings, overridable per chat / per eval.
+  TypeSafe's **Jev** (through OpenRouter's `/systemone` endpoint with your OpenRouter key, or directly with a TypeSafe key). Chosen in Settings, overridable per chat / per eval.
 - **TypeSafe / Jev agent skill** – `backend/skills/` holds the skill (`SKILL.md`) and primitive docs
   fetched from docs.typesafe.ai. Laya and Jev share the same question schema, so the distilled
   question-writing guidance is injected into the text model's prompt. `GET /api/skill` shows it.

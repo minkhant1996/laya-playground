@@ -223,23 +223,40 @@ def get_typesafe_key() -> str:
     return secrets_store.get_secret("typesafe_api_key") or settings.typesafe_api_key
 
 
-async def jev_decide(state: Any, questions: dict[str, Any], model: str = "jev-latest", api_key: str | None = None) -> dict[str, Any]:
-    """Same request/response schema as Laya (choice / score / noul) via TypeSafe's hosted Jev."""
-    api_key = api_key or get_typesafe_key()
-    if not api_key:
-        raise RuntimeError("TypeSafe API key not set: add it in Settings")
+async def jev_decide(state: Any, questions: dict[str, Any], model: str = "jev-1.13", api_key: str | None = None, via: str | None = None) -> dict[str, Any]:
+    """Jev (TypeSafe System One). Same request/response schema as Laya (choice / score / noul).
+
+    Routed through OpenRouter's /systemone endpoint when an OpenRouter key exists (model ids
+    jev-1.13, jev-latest), otherwise through TypeSafe's own API with a TypeSafe key.
+    """
+    if via is None:
+        via = "openrouter" if (api_key is None and get_openrouter_key()) else "typesafe"
+    if via == "openrouter":
+        key = api_key or get_openrouter_key()
+        url = f"{settings.openrouter_base_url}/systemone"
+        headers = {"Authorization": f"Bearer {key}", "HTTP-Referer": "http://localhost:5173", "X-Title": "Laya Playground"}
+        engine = "openrouter"
+    else:
+        key = api_key or get_typesafe_key()
+        url = TYPESAFE_URL
+        headers = {"Authorization": f"Bearer {key}"}
+        engine = "jev"
+    if not key:
+        raise RuntimeError("no key for Jev: add an OpenRouter key or a TypeSafe key in Settings")
+    model = model or "jev-1.13"
     t0 = time.perf_counter()
     async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(TYPESAFE_URL, headers={"Authorization": f"Bearer {api_key}"},
-                              json={"state": state, "model": model, "questions": questions})
+        r = await client.post(url, headers=headers, json={"state": state, "model": model, "questions": questions})
         if r.status_code >= 400:
-            usage.record(purpose="decide", engine="jev", model=model, latency_ms=(time.perf_counter() - t0) * 1000, ok=False, error=r.text[:200])
+            usage.record(purpose="decide", engine=engine, model=f"typesafe/{model}", latency_ms=(time.perf_counter() - t0) * 1000, ok=False, error=r.text[:200])
             if r.status_code == 401:
-                raise ValueError("TypeSafe rejected this key (401)")
-        r.raise_for_status()
+                raise ValueError(f"{via} rejected this key (401)")
+            raise RuntimeError(f"{via} systemone {r.status_code}: {r.text[:200]}")
         body = r.json()
     u = body.get("usage") or {}
-    usage.record(purpose="decide", engine="jev", model=body.get("model", model), input_tokens=u.get("input_tokens"), output_tokens=u.get("output_tokens"),
-                 latency_ms=(time.perf_counter() - t0) * 1000, extra={"questions": len(questions)})
-    body["routing"] = {"model": f"jev:{body.get('model', model)}", "repo": "typesafe.ai", "reason": "TypeSafe hosted Jev"}
+    served = body.get("model", model)
+    usage.record(purpose="decide", engine=engine, model=served if "/" in str(served) else f"typesafe/{served}", input_tokens=u.get("input_tokens"),
+                 output_tokens=u.get("output_tokens"), latency_ms=(time.perf_counter() - t0) * 1000,
+                 extra={"questions": len(questions), **({"cost_usd": float(u["cost"])} if u.get("cost") is not None else {})})
+    body["routing"] = {"model": f"jev:{served}", "repo": "typesafe/jev", "reason": f"TypeSafe Jev via {'OpenRouter' if via == 'openrouter' else 'TypeSafe API'}"}
     return body

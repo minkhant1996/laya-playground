@@ -292,7 +292,7 @@ class TypesafeKeyUpdate(BaseModel):
 async def set_typesafe_key(body: TypesafeKeyUpdate):
     """Verify a TypeSafe (Jev) key with a one-question call, then store it encrypted."""
     try:
-        await openrouter.jev_decide("ping", {"ok": {"type": "noul", "instructions": "Is this a greeting?"}}, api_key=body.api_key)
+        await openrouter.jev_decide("ping", {"ok": {"type": "noul", "instructions": "Is this a greeting?"}}, api_key=body.api_key, via="typesafe")
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
