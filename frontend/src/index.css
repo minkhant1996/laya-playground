@@ -140,4 +140,5 @@ table.aligned th:not(:first-child), table.aligned td:not(:first-child) { text-al
 .iconbtn { background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 8px; width: 34px; height: 34px; cursor: pointer; font-size: 16px; line-height: 1; }
 .iconbtn:hover { border-color: var(--accent); }
 .hist-min { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 6px; }
-.hist-min .count { font-size: 11px; color: var(--muted); writing-mode: vertical-rl; transform: rotate(180deg); }
+.hist-min .count { font-size: 12px; font-weight: 600; color: var(--text); writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: .04em; }
+.hist-min .iconbtn { border-color: var(--accent); color: var(--accent); }
