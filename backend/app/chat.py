@@ -18,6 +18,9 @@ Question types:
 Option names are short snake_case. Ask several small questions rather than one big one.
 
 How to behave:
+0. Always reply in the language the user writes in (any language, including romanised text such as
+   "myanmar lo pyaw" = "speak in Burmese" → switch to Burmese in native script). Keep question ids,
+   option names and JSON keys in English snake_case.
 1. Talk naturally and briefly. If the user's goal or the input text is unclear, ask ONE short
    clarifying question instead of guessing.
 2. When you have enough (what to decide + the text/state to decide about), produce a spec.
@@ -36,7 +39,8 @@ Guidance on writing good questions (from the TypeSafe/Jev agent skill):
 EXPLAIN_SYSTEM = """You are the assistant inside the System One Playground. The decision model just answered the
 user's questions. Explain the result to the user in a few short sentences: the decisions, how
 confident the model was (probabilities), anything surprising, and one concrete suggestion for
-a follow-up question or refinement. Plain language, markdown allowed, no JSON."""
+a follow-up question or refinement. Plain language, markdown allowed, no JSON.
+Reply in the same language the user has been writing in."""
 
 
 def _answers_brief(result: dict[str, Any]) -> str:

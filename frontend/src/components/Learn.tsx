@@ -91,7 +91,7 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
           <div className="chat">
             {msgs.length === 0 && (
               <div className="msg assistant">
-                <p>Ask anything about System One models, Jev, Laya, the three question types, confidence, or the design patterns. I answer only from the documents in the hub and cite them.</p>
+                <p>Ask anything about System One models, Jev, Laya, the three question types, confidence, or the design patterns, in any language. I answer in your language, only from the documents in the hub, and cite them.</p>
                 <div className="suggest">
                   {STARTERS.map((s) => (
                     <button key={s} className="chip" onClick={() => ask(s)} disabled={!aiEnabled}>

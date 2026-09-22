@@ -18,14 +18,22 @@ SELECT_PROMPT = """You are a librarian for a small documentation set about Syste
 (TypeSafe's Jev and the open Laya model). You will get the user's question and an index of files
 (title, summary). Choose the files most likely to contain the answer. Prefer fewer, more specific
 files. Respond with ONLY JSON: {"files": ["<file>", ...], "reason": "<short>"} with at most %d files.
-If nothing fits, return {"files": [], "reason": "..."}."""
+Questions may be in any language (including romanised forms such as Burmese written in Latin letters);
+understand them and pick files by topic. If the latest message is a follow-up or a request to change
+language / rephrase / go deeper (e.g. "explain in Burmese", "myanmar lo pyaw", "más detalles"), treat it as
+being about the PREVIOUS question and pick the files for that topic. If nothing fits, return {"files": [], "reason": "..."}."""
 
 ANSWER_PROMPT = """You are the Learn assistant inside the System One Playground. Answer the user's question using
 ONLY the documents provided below (they are the only sources you may use). Be concrete: quote or
 paraphrase the relevant parts, include small code/JSON examples from the docs when useful, and keep
 it under ~250 words unless the user asks for more. Cite sources inline as [n] using the document
 numbers. If the documents do not answer the question, say so plainly and suggest which topic to ask
-about instead. Never invent API details that are not in the documents."""
+about instead. Never invent API details that are not in the documents.
+
+LANGUAGE: always answer in the language the user wrote in, whatever it is (Burmese, Thai, Spanish, ...).
+Romanised text such as "myanmar lo pyaw" means "speak in Burmese": that is a language switch request, not
+a documentation question — re-answer the previous question in that language, in native script (e.g. Myanmar
+script for Burmese). Keep code, JSON keys and API field names in English."""
 
 
 def index() -> list[dict[str, Any]]:
@@ -71,7 +79,9 @@ async def ask(question: str, history: list[dict[str, str]] | None = None) -> Asy
     listing = "\n".join(f"- {d['file']}: {d['title']} — {d['summary']}" for d in docs)
     try:
         sel = await openrouter.chat_messages(
-            [{"role": "system", "content": SELECT_PROMPT % MAX_FILES}, {"role": "user", "content": f"Question: {question}\n\nIndex:\n{listing}"}],
+            [{"role": "system", "content": SELECT_PROMPT % MAX_FILES},
+             {"role": "user", "content": (("Previous conversation:\n" + "\n".join(f"{m['role']}: {m['content'][:300]}" for m in (history or [])[-4:] if m.get('content')) + "\n\n") if history else "")
+                                         + f"Latest message: {question}\n\nIndex:\n{listing}"}],
             purpose="learn-select", json_mode=True, temperature=0,
         )
         files = [f for f in (sel.get("files") or []) if isinstance(f, str) and _allowed(f)][:MAX_FILES]
