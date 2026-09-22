@@ -1,4 +1,4 @@
-import type { ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, ORModel, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
+import type { ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, LibraryEntry, ORModel, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`/api${path}`, {
@@ -90,6 +90,8 @@ export const api = {
     shortlist_k?: number | null
   }) => req<EvalResult>('/datasets/evaluate', { method: 'POST', body: JSON.stringify(body) }),
   inspectKaggle: (ref: string, file?: string, header = true) => req<KaggleInspect>('/datasets/kaggle/inspect', { method: 'POST', body: JSON.stringify({ ref, file, header }) }),
+  library: () => req<LibraryEntry[]>('/datasets/library'),
+  deleteLibrary: (id: string) => req<{ ok: boolean }>(`/datasets/library/${id}`, { method: 'DELETE' }),
   inspect: (ref: string) => req<InspectResult>('/datasets/inspect', { method: 'POST', body: JSON.stringify({ ref }) }),
   upload: async (file: File) => {
     const fd = new FormData()

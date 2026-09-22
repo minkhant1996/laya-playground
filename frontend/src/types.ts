@@ -185,3 +185,12 @@ export interface KaggleInspect {
   labels: string[]
   preview: Record<string, unknown>[]
 }
+
+export interface LibraryEntry extends DatasetSource {
+  id: string
+  name: string
+  size: number | null
+  labels: number | null
+  last_used: number
+  split?: string | null
+}

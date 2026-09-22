@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import EnginePicker from './EnginePicker'
 import EvalTable from './EvalTable'
 import { api } from '../api'
-import type { DatasetInfo, DatasetSource, Engine, EvalResult, EvalRow, InspectResult, KaggleInspect, UploadResult } from '../types'
+import type { DatasetInfo, DatasetSource, Engine, EvalResult, EvalRow, InspectResult, KaggleInspect, LibraryEntry, UploadResult } from '../types'
 
-type Mode = 'preset' | 'hf' | 'upload' | 'kaggle'
+type Mode = 'preset' | 'hf' | 'upload' | 'kaggle' | 'saved'
 
 export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }: { aiEnabled: boolean; defaultEngine: Engine; typesafeReady: boolean }) {
   const [mode, setMode] = useState<Mode>('preset')
@@ -16,6 +16,11 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   const [hfConfig, setHfConfig] = useState('')
   const [inspect, setInspect] = useState<InspectResult | null>(null)
   const [inspecting, setInspecting] = useState(false)
+
+  // saved library
+  const [lib, setLib] = useState<LibraryEntry[]>([])
+  const [saved, setSaved] = useState<LibraryEntry | null>(null)
+  const loadLib = () => api.library().then(setLib).catch(() => setLib([]))
 
   // kaggle mode
   const [kgRef, setKgRef] = useState('')
@@ -49,7 +54,14 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
 
   useEffect(() => {
     api.datasets().then(setDatasets).catch(() => setDatasets([]))
+    loadLib()
   }, [])
+  function pickSaved(e: LibraryEntry) {
+    setSaved(e)
+    setTextCol(e.text_column ?? '')
+    setLabelCol(e.label_column ?? '')
+    if (e.split) setSplit(e.split)
+  }
 
   async function doInspect() {
     setError('')
@@ -107,6 +119,11 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
       if (!inspect || inspect.needs_config) return null
       return { kind: 'hf', path: inspect.path, config: inspect.config ?? null, text_column: textCol, label_column: labelCol }
     }
+    if (mode === 'saved') {
+      if (!saved) return null
+      const { id: _id, name: _n, size: _s, labels: _l, last_used: _u, split: _sp, ...src } = saved
+      return { ...src, text_column: textCol, label_column: labelCol }
+    }
     if (mode === 'kaggle') {
       if (!kg) return null
       return { kind: 'kaggle', path: kg.path, file: kg.file, header: kg.header, text_column: textCol, label_column: labelCol }
@@ -118,7 +135,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   async function run() {
     const source = buildSource()
     if (!source) {
-      setError(mode === 'hf' || mode === 'kaggle' ? 'Load a dataset link first.' : 'Upload a file first.')
+      setError(mode === 'saved' ? 'Pick a saved dataset first.' : mode === 'hf' || mode === 'kaggle' ? 'Load a dataset link first.' : 'Upload a file first.')
       return
     }
     setError('')
@@ -144,6 +161,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
           } else if (ev.type === 'done') {
             setResult(ev.result)
             setStatus('done')
+            loadLib()
           } else if (ev.type === 'error') setError(ev.message)
         },
         ac.signal,
@@ -158,7 +176,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   }
 
   const current = datasets.find((d) => d.id === datasetId)
-  const columns = mode === 'hf' ? inspect?.columns : mode === 'upload' ? upload?.columns : mode === 'kaggle' ? kg?.columns : undefined
+  const columns = mode === 'hf' ? inspect?.columns : mode === 'upload' ? upload?.columns : mode === 'kaggle' ? kg?.columns : mode === 'saved' && saved ? [...new Set([saved.text_column, saved.label_column].filter((c): c is string => !!c && c !== '__all__'))] : undefined
   const labelCount = mode === 'hf' ? inspect?.labels?.length : mode === 'upload' ? upload?.labels.length : mode === 'kaggle' ? kg?.labels.length : undefined
 
   return (
@@ -168,6 +186,9 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
         <div className="tabs" style={{ marginBottom: 12 }}>
           <button className={mode === 'preset' ? 'active' : ''} onClick={() => setMode('preset')}>
             Preset
+          </button>
+          <button className={mode === 'saved' ? 'active' : ''} onClick={() => setMode('saved')}>
+            Saved ({lib.length})
           </button>
           <button className={mode === 'kaggle' ? 'active' : ''} onClick={() => setMode('kaggle')}>
             Kaggle link
@@ -223,6 +244,42 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
               <div className="small" style={{ marginTop: 8 }}>
                 {inspect.path}
                 {inspect.config ? ` (${inspect.config})` : ''} · splits: {inspect.splits?.join(', ')} · {inspect.size} rows in {inspect.default_split} · {inspect.labels?.length} labels
+              </div>
+            )}
+          </>
+        )}
+
+        {mode === 'saved' && (
+          <>
+            {lib.length === 0 && <div className="small">Nothing yet. Any Kaggle, Hugging Face or uploaded dataset you evaluate is remembered here with its columns, and its data stays cached locally.</div>}
+            <div className="sessions" style={{ maxHeight: 260 }}>
+              {lib.map((e) => (
+                <div key={e.id} className={`session ${saved?.id === e.id ? 'on' : ''}`} onClick={() => pickSaved(e)} title={`${e.kind} · ${e.text_column} → ${e.label_column} · ${new Date(e.last_used * 1000).toLocaleString()}`}>
+                  <span>
+                    <span className="kind">{e.kind}</span> {e.name}
+                    {e.file ? ` / ${e.file}` : ''}
+                  </span>
+                  <small>
+                    {e.size ?? '?'} rows · {e.labels ?? '?'} labels
+                  </small>
+                  <button
+                    title="Forget this dataset"
+                    onClick={(ev) => {
+                      ev.stopPropagation()
+                      api.deleteLibrary(e.id).then(() => {
+                        if (saved?.id === e.id) setSaved(null)
+                        loadLib()
+                      })
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+            {saved && (
+              <div className="small" style={{ marginTop: 6 }}>
+                Selected: {saved.name} · text: <b>{saved.text_column === '__all__' ? 'all columns as JSON' : saved.text_column}</b> · label: <b>{saved.label_column}</b>
               </div>
             )}
           </>
@@ -286,7 +343,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
           </>
         )}
 
-        {columns && (
+        {columns && mode !== 'saved' && (
           <div className="row">
             <label>text / state column</label>
             <select value={textCol} onChange={(e) => setTextCol(e.target.value)} style={{ width: 220 }}>
@@ -307,7 +364,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
         )}
 
         <div className="row">
-          {mode !== 'upload' && mode !== 'kaggle' && (
+          {mode !== 'upload' && mode !== 'kaggle' && mode !== 'saved' && (
             <>
               <label>split</label>
               <input value={split} onChange={(e) => setSplit(e.target.value)} style={{ width: 110 }} />

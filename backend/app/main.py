@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from . import datasets_service as dsvc
+from . import library
 from . import usage
 from . import laya_service, openrouter
 from .config import get_decision_engine, get_openrouter_key, get_openrouter_model, settings
@@ -170,6 +171,17 @@ async def list_datasets():
     return list(dsvc.DATASETS.values())
 
 
+@app.get("/api/datasets/library")
+async def dataset_library():
+    """Previously loaded Kaggle / Hugging Face / uploaded sources, ready to reuse (data is cached locally)."""
+    return library.list_all()
+
+
+@app.delete("/api/datasets/library/{entry_id}")
+async def dataset_library_delete(entry_id: str):
+    return {"ok": library.delete(entry_id)}
+
+
 @app.get("/api/datasets/{dataset_id}/labels")
 async def dataset_labels(dataset_id: str, split: str = "test"):
     info = dsvc.DATASETS.get(dataset_id)
@@ -302,6 +314,10 @@ async def _evaluate_events(req: EvaluateRequest):
     end = min(req.offset + req.limit, len(ds))
     subset = ds.select(range(req.offset, end))
     n_total = len(subset)
+    src = req.source or DatasetSource(kind="preset", dataset_id=req.dataset_id)
+    if src.kind != "preset":
+        library.remember({**src.model_dump(), "text_column": text_col, "label_column": label_col, "split": req.split if src.kind == "hf" else None},
+                         name=name, size=len(ds), labels=len(ids))
     yield {"type": "start", "n": n_total, "labels": ids, "criteria": criteria, "engine": engine}
 
     rows: list[EvaluateRow] = []
