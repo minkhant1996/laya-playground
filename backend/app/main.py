@@ -177,6 +177,25 @@ async def dataset_library():
     return library.list_all()
 
 
+class SavePlanRequest(BaseModel):
+    source: DatasetSource
+    split: str = "test"
+    plan: dict[str, Any]           # the full PlanResult from the UI (editable), stored verbatim
+
+
+@app.post("/api/datasets/library/plan")
+async def save_plan(req: SavePlanRequest):
+    """Remember the evaluation plan for a source so it is restored next time."""
+    src = {**req.source.model_dump(), "split": req.split if req.source.kind == "hf" else None}
+    e = library.remember(src, plan=req.plan)
+    return {"ok": True, "id": e["id"]}
+
+
+@app.delete("/api/datasets/library/{entry_id}/plan")
+async def clear_plan(entry_id: str):
+    return {"ok": library.clear_plan(entry_id)}
+
+
 @app.delete("/api/datasets/library/{entry_id}")
 async def dataset_library_delete(entry_id: str):
     return {"ok": library.delete(entry_id)}
@@ -331,6 +350,7 @@ async def _evaluate_events(req: EvaluateRequest):
             return names[int(raw)]
         return str(raw)
 
+    generated_criteria = None
     if plan:
         qtype = plan.question.type
         question = {"q": plan.question.model_dump(exclude_none=True)}
@@ -347,12 +367,19 @@ async def _evaluate_events(req: EvaluateRequest):
         label_map = {n: dsvc.to_label_id(n) for n in names}
         state_cols = text_col
         criteria = {lid: lid.replace("_", " ") for lid in ids}
+        src0 = req.source or DatasetSource(kind="preset", dataset_id=req.dataset_id)
+        cached = (library.get(src0.model_dump()) or {}).get("criteria")
+        generated_criteria = None
         if req.criteria:
             criteria.update({dsvc.to_label_id(k): v for k, v in req.criteria.items() if dsvc.to_label_id(k) in criteria})
+        elif req.use_ai_criteria and cached and not req.refresh_criteria and set(cached) >= set(ids):
+            criteria = {k: cached[k] for k in ids}
+            yield {"type": "status", "message": "using saved AI criteria (tick refresh to regenerate)"}
         elif req.use_ai_criteria and get_openrouter_key():
             yield {"type": "status", "message": f"writing criteria for {len(ids)} labels with {get_openrouter_model()}"}
             try:
                 criteria = await openrouter.describe_labels(name, ids)
+                generated_criteria = criteria
             except Exception as e:
                 yield {"type": "status", "message": f"AI criteria failed ({e}); using label names"}
         question = {"q": {"type": "choice", "instructions": req.question_instructions or "Which category does this text belong to?", "criteria": criteria}}
@@ -368,9 +395,9 @@ async def _evaluate_events(req: EvaluateRequest):
     subset = ds.select(range(req.offset, end))
     n_total = len(subset)
     src = req.source or DatasetSource(kind="preset", dataset_id=req.dataset_id)
-    if src.kind != "preset":
-        library.remember({**src.model_dump(), "text_column": (text_col if isinstance(state_cols, str) else "__all__"), "label_column": label_col,
-                          "split": req.split if src.kind == "hf" else None}, name=name, size=len(ds), labels=len(names))
+    library.remember({**src.model_dump(), "text_column": (text_col if isinstance(state_cols, str) else "__all__"), "label_column": label_col,
+                      "split": req.split if src.kind == "hf" else None}, name=name, size=len(ds), labels=len(names),
+                     criteria=generated_criteria)
     yield {"type": "start", "n": n_total, "labels": ids, "criteria": criteria, "engine": engine, "question_type": qtype}
 
     load_s = 0.0

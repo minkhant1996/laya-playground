@@ -198,6 +198,8 @@ export interface LibraryEntry extends DatasetSource {
   labels: number | null
   last_used: number
   split?: string | null
+  plan?: PlanResult | null
+  criteria?: Record<string, string> | null
 }
 
 export interface EvalPlan {

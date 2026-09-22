@@ -22,6 +22,8 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   const [plan, setPlan] = useState<PlanResult | null>(null)
   const [planning, setPlanning] = useState(false)
   const [usePlan, setUsePlan] = useState(true)
+  const [planSource, setPlanSource] = useState<'saved' | 'new' | null>(null)
+  const [refreshCriteria, setRefreshCriteria] = useState(false)
 
   // saved library
   const [lib, setLib] = useState<LibraryEntry[]>([])
@@ -148,15 +150,24 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
     setError('')
     setPlanning(true)
     try {
-      setPlan(await api.plan(source, split))
+      const p = await api.plan(source, split)
+      setPlan(p)
       setUsePlan(true)
+      setPlanSource('new')
+      api.savePlan(source, split, p).then(loadLib).catch(() => undefined)
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setPlanning(false)
     }
   }
-  const updatePlan = (p: EvalPlan) => setPlan(plan ? { ...plan, ...p } : plan)
+  const updatePlan = (p: EvalPlan) => {
+    if (!plan) return
+    const next = { ...plan, ...p }
+    setPlan(next)
+    const source = buildSource()
+    if (source) api.savePlan(source, split, next).catch(() => undefined)
+  }
 
   async function run() {
     const source = buildSource()
@@ -181,6 +192,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
           limit,
           offset,
           use_ai_criteria: useAi && aiEnabled,
+          refresh_criteria: refreshCriteria,
           shortlist_k: shortlist > 1 ? shortlist : null,
           engine,
           plan: usePlan && plan ? { state_columns: plan.state_columns, label_column: plan.label_column, question: plan.question, label_map: plan.label_map } : undefined,
@@ -215,8 +227,24 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   }
 
   useEffect(() => {
-    setPlan(null)
-  }, [mode, datasetId, inspect, upload, kg, saved])
+    // restore a remembered plan for the current source, if any
+    const src = buildSource()
+    const entry = src
+      ? lib.find((e) =>
+          e.kind === src.kind &&
+          (src.kind === 'preset' ? e.dataset_id === src.dataset_id : src.kind === 'upload' ? e.upload_id === src.upload_id : e.path === src.path && (e.file ?? null) === (src.file ?? null) && (e.config ?? null) === (src.config ?? null)),
+        )
+      : undefined
+    if (entry?.plan) {
+      setPlan(entry.plan)
+      setUsePlan(true)
+      setPlanSource('saved')
+    } else {
+      setPlan(null)
+      setPlanSource(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, datasetId, inspect, upload, kg, saved, lib])
 
   const current = datasets.find((d) => d.id === datasetId)
   const columns = mode === 'hf' ? inspect?.columns : mode === 'upload' ? upload?.columns : mode === 'kaggle' ? kg?.columns : mode === 'saved' && saved ? [...new Set([saved.text_column, saved.label_column].filter((c): c is string => !!c && c !== '__all__'))] : undefined
@@ -413,8 +441,13 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
           {plan && (
             <label>
               <input type="checkbox" checked={usePlan} onChange={(e) => setUsePlan(e.target.checked)} style={{ width: 'auto', marginRight: 6 }} />
-              use plan ({plan.question.type})
+              use plan ({plan.question.type}){planSource === 'saved' ? ' · restored' : ''}
             </label>
+          )}
+          {!plan && (
+            <span className="small">
+              {mode === 'preset' ? 'Optional: presets are ready to evaluate as-is (choice over their labels).' : 'Optional: without a plan the label column is evaluated as a choice question.'}
+            </span>
           )}
           {!aiEnabled && <span className="small">Add an OpenRouter key to use the AI preparer.</span>}
         </div>
@@ -433,9 +466,15 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
           {!(plan && usePlan) && <label title="For many-label sets: embed-rank labels and ask Laya only over the top-k. 0 = off.">shortlist k</label>}
           {!(plan && usePlan) && <input type="number" min={0} max={64} value={shortlist} onChange={(e) => setShortlist(+e.target.value)} style={{ width: 80 }} />}
           {!(plan && usePlan) && (
-            <label>
+            <label title="Generated once per dataset and saved; tick refresh to regenerate">
               <input type="checkbox" checked={useAi} disabled={!aiEnabled} onChange={(e) => setUseAi(e.target.checked)} style={{ width: 'auto', marginRight: 6 }} />
               AI-written label criteria
+            </label>
+          )}
+          {!(plan && usePlan) && useAi && (
+            <label title="Ignore the saved criteria and write them again">
+              <input type="checkbox" checked={refreshCriteria} onChange={(e) => setRefreshCriteria(e.target.checked)} style={{ width: 'auto', marginRight: 6 }} />
+              refresh
             </label>
           )}
           <button className="primary" disabled={busy} onClick={run}>

@@ -82,6 +82,7 @@ class EvaluateRequest(BaseModel):
     # optional user-edited criteria (label -> description). If missing, generated.
     criteria: dict[str, str] | None = None
     use_ai_criteria: bool = True
+    refresh_criteria: bool = False    # ignore cached AI criteria and regenerate
 
 
 class EvaluateRow(BaseModel):
