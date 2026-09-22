@@ -36,7 +36,9 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   const [live, setLive] = useState<{ i: number; n: number; accuracy: number; elapsed: number; eta: number } | null>(null)
   const [liveRows, setLiveRows] = useState<EvalRow[]>([])
   const abortRef = useRef<AbortController | null>(null)
-  useEffect(() => setEngine(defaultEngine), [defaultEngine])
+  useEffect(() => {
+    setEngine(defaultEngine)
+  }, [defaultEngine])
 
   useEffect(() => {
     api.datasets().then(setDatasets).catch(() => setDatasets([]))

@@ -23,7 +23,9 @@ export default function ModelPicker({ value, onChange, placeholder }: { value: s
       })
       .catch((e) => setErr((e as Error).message))
   }, [])
-  useEffect(() => setQ(value), [value])
+  useEffect(() => {
+    setQ(value)
+  }, [value])
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (box.current && !box.current.contains(e.target as Node)) setOpen(false)

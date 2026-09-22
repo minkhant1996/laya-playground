@@ -41,8 +41,12 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
   const [advResult, setAdvResult] = useState<PredictResult | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
 
-  useEffect(() => setEngine(defaultEngine), [defaultEngine])
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [msgs, busy])
+  useEffect(() => {
+    setEngine(defaultEngine)
+  }, [defaultEngine])
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [msgs, busy])
 
   async function send(text: string) {
     const content = text.trim()
