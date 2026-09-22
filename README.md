@@ -12,6 +12,9 @@ questions and return calibrated answers instead of text.
 - **TypeSafe / Jev agent skill** – `backend/skills/` holds the skill (`SKILL.md`) and primitive docs
   fetched from docs.typesafe.ai. Laya and Jev share the same question schema, so the distilled
   question-writing guidance is injected into the text model's prompt. `GET /api/skill` shows it.
+- **Multilingual** – state, instructions, option names and rubrics can all be in any language (Burmese,
+  Thai, Hindi…). Laya is routed to its multilingual checkpoint whenever the state *or the questions* use a
+  non-Latin script; Jev accepts them directly. Chat and Learn reply in the user's language, or a chosen one.
 - **Chat sessions** – every chat is saved on the backend (`backend/data/chats/`), listed in a sidebar,
   reopenable, and deletable one by one or all at once.
 - **Learn tab** – ask questions about System One, Jev, Laya, the question types, confidence and the

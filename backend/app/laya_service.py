@@ -41,16 +41,54 @@ def _embed_fn_for(model_name: str):
     return _embed_fns[model_name]
 
 
+def _questions_text(questions: dict[str, Any]) -> str:
+    """All human-readable text in the questions (instructions, option names, rubrics, levels)."""
+    import json
+
+    return json.dumps(questions, ensure_ascii=False)
+
+
+def _needs_multilingual(text: str) -> bool:
+    """True when the text contains a meaningful share of non-Latin letters."""
+    from laya import detect_script
+
+    try:
+        info = detect_script(text)
+        # laya returns either a dict with 'non_latin_fraction' or a script name
+        if isinstance(info, dict):
+            return float(info.get("non_latin_fraction", 0)) > 0.2
+        return str(info).lower() not in ("latin", "")
+    except Exception:
+        letters = [c for c in text if c.isalpha()]
+        return bool(letters) and sum(1 for c in letters if ord(c) > 0x024F) / len(letters) > 0.2
+
+
+def _model_override(state: Any, questions: dict[str, Any]) -> str | None:
+    """The router only inspects the state; if the questions are written in a non-Latin script
+    (e.g. Burmese instructions/options with an English state) the English checkpoint cannot read
+    them, so force the multilingual checkpoint."""
+    if _needs_multilingual(_questions_text(questions)):
+        return "multilingual"
+    return None
+
+
 def _predict_sync(state: Any, questions: dict[str, Any], shortlist_k: int | None) -> dict[str, Any]:
     router = get_router()
+    override = _model_override(state, questions)
     if not shortlist_k:
-        return router.predict(state, questions)
+        res = router.predict(state, questions, model=override)
+        if override and isinstance(res.get("routing"), dict) and res["routing"].get("model") != "multilingual":
+            res["routing"]["model"] = "multilingual"
+        if override and isinstance(res.get("routing"), dict):
+            res["routing"]["reason"] = "questions contain non-Latin script; multilingual checkpoint forced"
+        return res
     # Many-label choice: rank labels by embedding similarity first, then ask Laya over the top-k.
     from laya import predict_shortlist
 
     decision = router.route(state, questions)
-    embed_fn = _embed_fn_for(decision["model"])
-    return predict_shortlist(router, state, questions, embed_fn, k=shortlist_k, model=decision["model"])
+    model_name = override or decision["model"]
+    embed_fn = _embed_fn_for(model_name)
+    return predict_shortlist(router, state, questions, embed_fn, k=shortlist_k, model=model_name)
 
 
 async def predict(state: Any, questions: dict[str, Any], shortlist_k: int | None = None) -> dict[str, Any]:
