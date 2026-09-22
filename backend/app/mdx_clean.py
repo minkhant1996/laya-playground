@@ -79,5 +79,6 @@ def clean(md: str) -> str:
     md = re.sub(r"\{/\*.*?\*/\}", "", md, flags=re.S)       # {/* mdx comments */}
     # de-indent lines that only look like code because MDX components were indented
     md = re.sub(r"^ {2,}(?=!\[|\*\*|[A-Za-z])", "", md, flags=re.M)
+    md = re.sub(r"^[ \t]+$", "", md, flags=re.M)         # whitespace-only lines
     md = re.sub(r"\n{3,}", "\n\n", md)
     return md.strip()
