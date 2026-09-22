@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import EnginePicker from './EnginePicker'
 import EvalTable from './EvalTable'
 import PlanEditor from './PlanEditor'
+import CompareView from './CompareView'
 import { api } from '../api'
 import type { DatasetInfo, DatasetSource, Engine, EvalResult, EvalRow, EvalPlan, InspectResult, KaggleInspect, LibraryEntry, PlanResult, UploadResult } from '../types'
 
@@ -24,6 +25,8 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   const [usePlan, setUsePlan] = useState(true)
   const [planSource, setPlanSource] = useState<'saved' | 'new' | null>(null)
   const [refreshCriteria, setRefreshCriteria] = useState(false)
+  const [compare, setCompare] = useState<{ a: EvalResult; b: EvalResult } | null>(null)
+  const [compareStage, setCompareStage] = useState('')
 
   // saved library
   const [lib, setLib] = useState<LibraryEntry[]>([])
@@ -169,15 +172,16 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
     if (source) api.savePlan(source, split, next).catch(() => undefined)
   }
 
-  async function run() {
+  async function runWith(eng: Engine): Promise<EvalResult | null> {
     const source = buildSource()
     if (!source) {
       setError(mode === 'saved' ? 'Pick a saved dataset first.' : mode === 'hf' || mode === 'kaggle' ? 'Load a dataset link first.' : 'Upload a file first.')
-      return
+      return null
     }
     setError('')
     setBusy(true)
     setResult(null)
+    let out: EvalResult | null = null
     setLive({ i: 0, n: limit, accuracy: 0, elapsed: 0, eta: 0 })
     setLiveRows([])
     setLoadInfo('')
@@ -194,7 +198,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
           use_ai_criteria: useAi && aiEnabled,
           refresh_criteria: refreshCriteria,
           shortlist_k: shortlist > 1 ? shortlist : null,
-          engine,
+          engine: eng,
           plan: usePlan && plan ? { state_columns: plan.state_columns, label_column: plan.label_column, question: plan.question, label_map: plan.label_map } : undefined,
         },
         (ev) => {
@@ -210,6 +214,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
             setLive({ i: ev.i, n: ev.n, accuracy: ev.accuracy, elapsed: ev.elapsed, eta: ev.eta, avg_ms: ev.avg_ms })
             setLiveRows((r) => [ev.row, ...r].slice(0, 12))
           } else if (ev.type === 'done') {
+            out = ev.result
             setResult(ev.result)
             setStatus('done')
             loadLib()
@@ -224,6 +229,27 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
       setBusy(false)
       abortRef.current = null
     }
+    return out
+  }
+
+  const run = () => {
+    setCompare(null)
+    return runWith(engine)
+  }
+
+  async function compareModels() {
+    setCompare(null)
+    const jev: Engine = { kind: 'jev', model: engine.kind === 'jev' ? engine.model : 'jev-1.13' }
+    setCompareStage('1/2 · Laya (local)')
+    const a = await runWith({ kind: 'laya' })
+    if (!a) {
+      setCompareStage('')
+      return
+    }
+    setCompareStage('2/2 · Jev via OpenRouter')
+    const b = await runWith(jev)
+    setCompareStage('')
+    if (b) setCompare({ a, b })
   }
 
   useEffect(() => {
@@ -480,6 +506,9 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
           <button className="primary" disabled={busy} onClick={run}>
             {busy ? 'Evaluating…' : 'Evaluate'}
           </button>
+          <button className="ghost" disabled={busy || !aiEnabled} onClick={compareModels} title="Run the same samples through Laya (local) and Jev (via OpenRouter) and compare accuracy, speed and agreement">
+            {compareStage ? `Comparing ${compareStage}` : '⚖ Compare Laya vs Jev'}
+          </button>
           {busy && (
             <button className="ghost" onClick={() => abortRef.current?.abort()}>
               Stop
@@ -537,7 +566,8 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
         {error && <div className="error">{error}</div>}
       </section>
 
-      {result && (
+      {compare && <CompareView a={compare.a} b={compare.b} labelA="Laya (local)" labelB={`Jev (${compare.b.routing?.model?.replace('jev:', '') ?? 'jev-1.13'})`} />}
+      {result && !compare && (
         <section className="panel" style={{ marginTop: 16 }}>
           <div className="metrics">
             <div className="metric">
