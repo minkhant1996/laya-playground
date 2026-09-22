@@ -132,8 +132,8 @@ table.aligned th:not(:first-child), table.aligned td:not(:first-child) { text-al
 .langpick > button { margin: 0; }
 .scroll { overflow: auto; max-height: 360px; }
 .scroll thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
-.evalwrap { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
-.evalwrap.min { grid-template-columns: minmax(0, 1fr) 56px; }
+.evalwrap { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
+.evalwrap.min { grid-template-columns: 56px minmax(0, 1fr); }
 @media (max-width: 900px) { .evalwrap, .evalwrap.min { grid-template-columns: 1fr; } }
 .histbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .histbar h2 { margin: 0; }

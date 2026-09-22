@@ -578,6 +578,7 @@ export default function DatasetEval({
 
   return (
     <div className={`evalwrap ${historyOpen ? "" : "min"}`}>
+      {historyPanel}
       <div>
         <section className="panel">
           <h2>Data source</h2>
@@ -1146,7 +1147,6 @@ export default function DatasetEval({
           </section>
         )}
       </div>
-      {historyPanel}
     </div>
   );
 }
