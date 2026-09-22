@@ -93,3 +93,9 @@ table.aligned th:not(:first-child), table.aligned td:not(:first-child) { text-al
 .badge.ok { color: var(--ok); background: rgba(60,207,122,.14); border: 1px solid rgba(60,207,122,.4); }
 .badge.bad { color: var(--bad); background: rgba(255,107,107,.14); border: 1px solid rgba(255,107,107,.4); }
 .evaltable th:nth-child(2), .evaltable th:nth-child(3) { width: 16%; }
+
+.stage { display: flex; gap: 6px; margin-bottom: 4px; }
+.stage .step { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+.stage .step.on { border-color: var(--accent); color: var(--text); background: rgba(108,140,255,.15); animation: pulse 1.2s ease-in-out infinite; }
+.stage .step.done { color: var(--ok); border-color: rgba(60,207,122,.4); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }

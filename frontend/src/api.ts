@@ -24,6 +24,31 @@ export const api = {
   orModels: () => req<ORModel[]>('/openrouter/models'),
   chat: (message: string, session_id: string | null, engine?: Engine | null) =>
     req<ChatTurn & { session_id: string; title: string; message: ChatMsg }>('/chat', { method: 'POST', body: JSON.stringify({ message, session_id, engine: engine ?? undefined }) }),
+  chatStream: async (message: string, session_id: string | null, engine: Engine | null | undefined, onStatus: (stage: string, message: string) => void) => {
+    const r = await fetch('/api/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, session_id, engine: engine ?? undefined }) })
+    if (!r.ok || !r.body) throw new Error((await r.json().catch(() => ({}))).detail ?? r.statusText)
+    const reader = r.body.getReader()
+    const dec = new TextDecoder()
+    let buf = ''
+    let done: (ChatTurn & { session_id: string; title: string; message: ChatMsg }) | null = null
+    for (;;) {
+      const { value, done: end } = await reader.read()
+      if (end) break
+      buf += dec.decode(value, { stream: true })
+      let nl
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim()
+        buf = buf.slice(nl + 1)
+        if (!line) continue
+        const ev = JSON.parse(line)
+        if (ev.type === 'status') onStatus(ev.stage, ev.message)
+        else if (ev.type === 'error') throw new Error(ev.message)
+        else if (ev.type === 'done') done = ev
+      }
+    }
+    if (!done) throw new Error('stream ended without a result')
+    return done
+  },
   sessions: () => req<ChatSessionSummary[]>('/chat/sessions'),
   session: (id: string) => req<ChatSession>(`/chat/sessions/${id}`),
   deleteSession: (id: string) => req<{ ok: boolean }>(`/chat/sessions/${id}`, { method: 'DELETE' }),

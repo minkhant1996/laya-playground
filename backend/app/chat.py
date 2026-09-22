@@ -56,27 +56,46 @@ def _answers_brief(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-async def turn(messages: list[dict[str, str]], engine: dict[str, Any] | None) -> dict[str, Any]:
-    """One chat turn. Returns {reply, spec?, result?, explanation?}."""
+def _engine_label(engine: dict[str, Any] | None) -> str:
+    from .config import get_decision_engine
+
+    e = engine or get_decision_engine()
+    return "Laya (local)" if e.get("kind") == "laya" else f"Jev ({e.get('model') or 'jev-1.13'} via OpenRouter)"
+
+
+async def turn_events(messages: list[dict[str, str]], engine: dict[str, Any] | None):
+    """Async generator: yields {"type": "status", ...} events, then {"type": "done", **result}."""
+    from .config import get_openrouter_model
+
+    text_model = get_openrouter_model()
     history = [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] in ("user", "assistant")]
+    resp: dict[str, Any] = {"reply": "", "spec": None, "result": None, "explanation": None}
+
+    yield {"type": "status", "stage": "preparing", "message": f"preparing questions with {text_model}"}
     out = await openrouter.chat_messages([{"role": "system", "content": CHAT_SYSTEM + guide(4000)}, *history], purpose="chat", json_mode=True)
     reply = str(out.get("reply") or "")
     spec = out.get("spec")
-    resp: dict[str, Any] = {"reply": reply, "spec": None, "result": None, "explanation": None}
+    resp["reply"] = reply
     if not spec or not isinstance(spec, dict) or not spec.get("questions"):
-        return resp
+        yield {"type": "done", **resp}
+        return
     state = spec.get("state")
+    resp["spec"] = spec
     if state in (None, ""):
         resp["reply"] = reply + "\n\nI have the questions ready, but I need the text or data to analyse. Paste it and I will run it."
-        resp["spec"] = spec
-        return resp
-    resp["spec"] = spec
+        yield {"type": "done", **resp}
+        return
+
+    yield {"type": "status", "stage": "deciding", "message": f"deciding with {_engine_label(engine)} · {len(spec['questions'])} question(s)"}
     try:
         result = await laya_service.decide(state, spec["questions"], engine)
     except Exception as e:
         resp["reply"] = reply + f"\n\nI prepared the questions but running the decision model failed: {e}"
-        return resp
+        yield {"type": "done", **resp}
+        return
     resp["result"] = result
+
+    yield {"type": "status", "stage": "explaining", "message": f"explaining the answers with {text_model}"}
     try:
         explanation = await openrouter.chat_messages(
             [
@@ -91,4 +110,13 @@ async def turn(messages: list[dict[str, str]], engine: dict[str, Any] | None) ->
         resp["explanation"] = str(explanation)
     except Exception as e:
         resp["explanation"] = f"(could not generate explanation: {e})"
-    return resp
+    yield {"type": "done", **resp}
+
+
+async def turn(messages: list[dict[str, str]], engine: dict[str, Any] | None) -> dict[str, Any]:
+    """Non-streaming wrapper."""
+    last: dict[str, Any] = {}
+    async for ev in turn_events(messages, engine):
+        if ev["type"] == "done":
+            last = {k: v for k, v in ev.items() if k != "type"}
+    return last

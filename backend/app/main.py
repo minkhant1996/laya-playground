@@ -74,10 +74,8 @@ class ChatRequest(BaseModel):
     engine: Engine | None = None
 
 
-@app.post("/api/chat")
-async def chat_turn(req: ChatRequest):
-    """One conversational turn inside a persisted session: text model prepares questions,
-    decision model answers, text model explains. Creates a session if none is given."""
+async def _chat_events(req: ChatRequest):
+    """Yields status events, then a final {"type": "done", session_id, title, message, ...}."""
     from . import chat, sessions
 
     engine = req.engine.model_dump() if req.engine else None
@@ -86,16 +84,44 @@ async def chat_turn(req: ChatRequest):
     except (FileNotFoundError, ValueError):
         sess = sessions.create(engine)
     history = [{"role": m["role"], "content": m["content"]} for m in sess["messages"]] + [{"role": "user", "content": req.message}]
-    try:
-        t = await chat.turn(history[-40:], engine)
-    except Exception as e:
-        raise HTTPException(502, f"chat failed: {e}")
+    t: dict[str, Any] = {}
+    async for ev in chat.turn_events(history[-40:], engine):
+        if ev["type"] == "done":
+            t = {k: v for k, v in ev.items() if k != "type"}
+        else:
+            yield ev
     reply = f"{t['reply']}\n\n{t['explanation']}" if t.get("explanation") else t["reply"]
     sess = sessions.append(sess["id"], [
         {"role": "user", "content": req.message, "ts": time.time()},
         {"role": "assistant", "content": reply, "spec": t.get("spec"), "result": t.get("result"), "ts": time.time()},
     ], engine)
-    return {"session_id": sess["id"], "title": sess["title"], "message": sess["messages"][-1], **t}
+    yield {"type": "done", "session_id": sess["id"], "title": sess["title"], "message": sess["messages"][-1], **t}
+
+
+@app.post("/api/chat")
+async def chat_turn(req: ChatRequest):
+    """One conversational turn inside a persisted session (non-streaming)."""
+    try:
+        last = {}
+        async for ev in _chat_events(req):
+            if ev["type"] == "done":
+                last = {k: v for k, v in ev.items() if k != "type"}
+        return last
+    except Exception as e:
+        raise HTTPException(502, f"chat failed: {e}")
+
+
+@app.post("/api/chat/stream")
+async def chat_turn_stream(req: ChatRequest):
+    """Same as /api/chat but streams NDJSON status events (preparing / deciding / explaining) first."""
+    async def gen():
+        try:
+            async for ev in _chat_events(req):
+                yield json.dumps(ev, ensure_ascii=False, default=str) + "\n"
+        except Exception as e:
+            yield json.dumps({"type": "error", "message": f"chat failed: {e}"}) + "\n"
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/api/chat/sessions")

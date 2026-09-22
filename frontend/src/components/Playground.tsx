@@ -30,6 +30,7 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
   const [input, setInput] = useState('')
   const [engine, setEngine] = useState<Engine>(defaultEngine)
   const [busy, setBusy] = useState(false)
+  const [stage, setStage] = useState<{ stage: string; message: string } | null>(null)
   const [error, setError] = useState('')
   const [stateText, setStateText] = useState('')
   const [questionsText, setQuestionsText] = useState(JSON.stringify(DEFAULT_QUESTIONS, null, 2))
@@ -78,7 +79,8 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
     setInput('')
     setBusy(true)
     try {
-      const t = await api.chat(content, sessionId, engine)
+      setStage({ stage: 'thinking', message: 'sending…' })
+      const t = await api.chatStream(content, sessionId, engine, (stg, message) => setStage({ stage: stg, message }))
       setSessionId(t.session_id)
       setMsgs([...next, t.message])
       loadSessions()
@@ -92,6 +94,7 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
       setMsgs(next)
     } finally {
       setBusy(false)
+      setStage(null)
     }
   }
 
@@ -190,7 +193,18 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
                   )}
                 </div>
               ))}
-              {busy && <div className="msg assistant small">thinking…</div>}
+              {busy && (
+                <div className="msg assistant">
+                  <div className="stage">
+                    {['preparing', 'deciding', 'explaining'].map((st) => (
+                      <span key={st} className={`step ${stage?.stage === st ? 'on' : ''} ${['preparing', 'deciding', 'explaining'].indexOf(st) < ['preparing', 'deciding', 'explaining'].indexOf(stage?.stage ?? '') ? 'done' : ''}`}>
+                        {st}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="small">{stage?.message ?? 'thinking…'}</div>
+                </div>
+              )}
               <div ref={bottom} />
             </div>
             <div className="composer">
