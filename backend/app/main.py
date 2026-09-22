@@ -73,6 +73,7 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     message: str = PField(min_length=1, max_length=20000)
     engine: Engine | None = None
+    language: str | None = PField(default=None, max_length=40, pattern=r"^[A-Za-z \-()']*$")
 
 
 async def _chat_events(req: ChatRequest):
@@ -86,7 +87,7 @@ async def _chat_events(req: ChatRequest):
         sess = sessions.create(engine)
     history = [{"role": m["role"], "content": m["content"]} for m in sess["messages"]] + [{"role": "user", "content": req.message}]
     t: dict[str, Any] = {}
-    async for ev in chat.turn_events(history[-40:], engine):
+    async for ev in chat.turn_events(history[-40:], engine, req.language):
         if ev["type"] == "done":
             t = {k: v for k, v in ev.items() if k != "type"}
         else:

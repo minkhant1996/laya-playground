@@ -4,6 +4,7 @@ import { api } from '../api'
 import type { ChatMsg, ChatSessionSummary, Engine, PredictResult, Question, Questions, QuestionType } from '../types'
 import AnswerList from './AnswerList'
 import EnginePicker from './EnginePicker'
+import LangPicker from './LangPicker'
 
 const SUGGESTIONS = [
   'Is this support email urgent, and which team should handle it? "Hi, we were billed twice for March. Refund it today or we cancel."',
@@ -56,6 +57,13 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
   const [questionsText, setQuestionsText] = useState(JSON.stringify(DEFAULT_QUESTIONS, null, 2))
   const [advResult, setAdvResult] = useState<PredictResult | null>(null)
   const [manualStatus, setManualStatus] = useState('')
+  const [lang, setLang] = useState<string>(() => {
+    try {
+      return localStorage.getItem('chat-lang') ?? 'Auto'
+    } catch {
+      return 'Auto'
+    }
+  })
   const [manualMs, setManualMs] = useState<number | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
 
@@ -102,7 +110,7 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
     setBusy(true)
     try {
       setStage({ stage: 'thinking', message: 'sending…' })
-      const t = await api.chatStream(content, sessionId, engine, (stg, message) => setStage({ stage: stg, message }))
+      const t = await api.chatStream(content, sessionId, engine, (stg, message) => setStage({ stage: stg, message }), lang === 'Auto' ? undefined : lang)
       setSessionId(t.session_id)
       setMsgs([...next, t.message])
       loadSessions()
@@ -209,12 +217,28 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
           </section>
 
           <section className="panel">
-            <h2>Chat{sessionId ? '' : ' · new'}</h2>
+            <h2 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span>Chat{sessionId ? '' : ' · new'}</span>
+              <span style={{ textTransform: 'none', letterSpacing: 0, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                reply in
+                <LangPicker
+                  value={lang}
+                  onChange={(v) => {
+                    setLang(v)
+                    try {
+                      localStorage.setItem('chat-lang', v)
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                />
+              </span>
+            </h2>
             {!aiEnabled && <div className="error">Add an OpenRouter key in Settings and pick a text model to chat. The Manual JSON tab works without it.</div>}
             <div className="chat">
               {msgs.length === 0 && (
                 <div className="msg assistant">
-                  <p>Hi! Tell me what you want to decide and paste the text. I will turn it into typed questions, run the decision model, and explain the result.</p>
+                  <p>Hi! Tell me what you want to decide and paste the text, in any language. I will turn it into typed questions, run the decision model, and explain the result. Laya routes non-Latin text to its multilingual checkpoint automatically.</p>
                   <div className="suggest">
                     {SUGGESTIONS.map((s) => (
                       <button key={s} className="chip" onClick={() => send(s)} disabled={!aiEnabled}>

@@ -67,7 +67,7 @@ def _engine_label(engine: dict[str, Any] | None) -> str:
     return "Laya (local)" if e.get("kind") == "laya" else f"Jev ({e.get('model') or 'jev-1.13'} via OpenRouter)"
 
 
-async def turn_events(messages: list[dict[str, str]], engine: dict[str, Any] | None):
+async def turn_events(messages: list[dict[str, str]], engine: dict[str, Any] | None, language: str | None = None):
     """Async generator: yields {"type": "status", ...} events, then {"type": "done", **result}."""
     from .config import get_openrouter_model
 
@@ -76,7 +76,8 @@ async def turn_events(messages: list[dict[str, str]], engine: dict[str, Any] | N
     resp: dict[str, Any] = {"reply": "", "spec": None, "result": None, "explanation": None}
 
     yield {"type": "status", "stage": "preparing", "message": f"preparing questions with {text_model}"}
-    out = await openrouter.chat_messages([{"role": "system", "content": CHAT_SYSTEM + guide(4000)}, *history], purpose="chat", json_mode=True)
+    lang_rule = f"\n\nOUTPUT LANGUAGE OVERRIDE: the user chose '{language}'. Write your 'reply' in {language} (native script) regardless of the input language. Keep question ids, option names and JSON keys in English snake_case." if language and language.lower() != "auto" else ""
+    out = await openrouter.chat_messages([{"role": "system", "content": CHAT_SYSTEM + guide(4000) + lang_rule}, *history], purpose="chat", json_mode=True)
     reply = str(out.get("reply") or "")
     spec = out.get("spec")
     resp["reply"] = reply
@@ -103,7 +104,7 @@ async def turn_events(messages: list[dict[str, str]], engine: dict[str, Any] | N
     try:
         explanation = await openrouter.chat_messages(
             [
-                {"role": "system", "content": EXPLAIN_SYSTEM},
+                {"role": "system", "content": EXPLAIN_SYSTEM + (f"\n\nOUTPUT LANGUAGE OVERRIDE: answer in {language} (native script)." if language and language.lower() != "auto" else "")},
                 *history[-6:],
                 {"role": "assistant", "content": reply},
                 {"role": "user", "content": "Decision model results:\n" + _answers_brief(result) + "\n\nQuestions asked:\n" + json.dumps(spec["questions"], ensure_ascii=False)[:4000]},

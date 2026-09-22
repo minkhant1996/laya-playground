@@ -24,8 +24,8 @@ export const api = {
   orModels: () => req<ORModel[]>('/openrouter/models'),
   chat: (message: string, session_id: string | null, engine?: Engine | null) =>
     req<ChatTurn & { session_id: string; title: string; message: ChatMsg }>('/chat', { method: 'POST', body: JSON.stringify({ message, session_id, engine: engine ?? undefined }) }),
-  chatStream: async (message: string, session_id: string | null, engine: Engine | null | undefined, onStatus: (stage: string, message: string) => void) => {
-    const r = await fetch('/api/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, session_id, engine: engine ?? undefined }) })
+  chatStream: async (message: string, session_id: string | null, engine: Engine | null | undefined, onStatus: (stage: string, message: string) => void, language?: string) => {
+    const r = await fetch('/api/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, session_id, engine: engine ?? undefined, language }) })
     if (!r.ok || !r.body) throw new Error((await r.json().catch(() => ({}))).detail ?? r.statusText)
     const reader = r.body.getReader()
     const dec = new TextDecoder()
