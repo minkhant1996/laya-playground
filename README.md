@@ -116,3 +116,7 @@ First model load downloads ~2 GB of checkpoints. Without a GPU, evaluation is ro
   backend beyond your machine, put it behind auth first.
 
 Add more datasets in `backend/app/datasets_service.py` (`DATASETS` dict).
+
+## License
+
+MIT © 2026 Min Khant Soe. See [LICENSE](LICENSE).
