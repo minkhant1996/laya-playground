@@ -91,7 +91,7 @@ export interface UploadResult {
 }
 
 export interface Engine {
-  kind: 'laya' | 'openrouter' | 'jev'
+  kind: 'laya' | 'jev'
   model?: string | null
 }
 

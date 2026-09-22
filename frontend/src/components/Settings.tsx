@@ -53,7 +53,6 @@ export default function Settings({ onChange }: { onChange: () => void }) {
     return `TypeSafe key ${r.masked} verified with a Jev call and saved encrypted.`
   })
   const savePrefs = wrap('prefs', async () => {
-    if (engine.kind === 'openrouter' && !engine.model) throw new Error('Pick an OpenRouter model for the decision engine.')
     await settingsApi.setPrefs({ openrouter_model: prepModel, decision_engine: engine })
     return 'Model preferences saved.'
   })

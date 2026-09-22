@@ -11,7 +11,7 @@ class Question(BaseModel):
 
 
 class Engine(BaseModel):
-    kind: Literal["laya", "openrouter", "jev"] = "laya"
+    kind: Literal["laya", "jev"] = "laya"
     model: str | None = None
 
 

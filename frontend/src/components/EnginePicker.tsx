@@ -1,5 +1,4 @@
 import type { Engine } from '../types'
-import ModelPicker from './ModelPicker'
 
 interface Props {
   value: Engine
@@ -9,7 +8,7 @@ interface Props {
   openrouterReady?: boolean
 }
 
-/** Which model answers the typed questions: Laya (local), any OpenRouter LLM, or TypeSafe's Jev. */
+/** Which model answers the typed questions: Laya (local) or TypeSafe's Jev (through OpenRouter). */
 export default function EnginePicker({ value, onChange, compact, typesafeReady, openrouterReady }: Props) {
   return (
     <div>
@@ -18,15 +17,10 @@ export default function EnginePicker({ value, onChange, compact, typesafeReady, 
           <input type="radio" checked={value.kind === 'laya'} onChange={() => onChange({ kind: 'laya' })} /> Laya (local)
         </label>
         <label>
-          <input type="radio" checked={value.kind === 'openrouter'} onChange={() => onChange({ kind: 'openrouter', model: value.kind === 'openrouter' ? value.model ?? '' : '' })} /> OpenRouter LLM
-          {openrouterReady === false && <span className="small"> (no key)</span>}
-        </label>
-        <label>
-          <input type="radio" checked={value.kind === 'jev'} onChange={() => onChange({ kind: 'jev', model: 'jev-1.13' })} /> Jev (TypeSafe)
+          <input type="radio" checked={value.kind === 'jev'} onChange={() => onChange({ kind: 'jev', model: 'jev-1.13' })} /> Jev (typesafe/jev-1.13 via OpenRouter)
           {openrouterReady === false && typesafeReady === false && <span className="small"> (needs OpenRouter or TypeSafe key)</span>}
         </label>
       </div>
-      {value.kind === 'openrouter' && <ModelPicker value={value.model ?? ''} onChange={(m) => onChange({ kind: 'openrouter', model: m })} />}
       {value.kind === 'jev' && (
         <div className="row" style={{ marginTop: 4 }}>
           <select value={value.model ?? 'jev-1.13'} onChange={(e) => onChange({ kind: 'jev', model: e.target.value })} style={{ maxWidth: 200 }}>

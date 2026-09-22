@@ -337,8 +337,8 @@ async def set_prefs(body: PrefsUpdate):
     """Non-secret preferences: JSON-preparer model and decision engine."""
     eng = body.decision_engine
     if eng is not None:
-        if eng.get("kind") not in ("laya", "openrouter", "jev"):
-            raise HTTPException(400, "decision_engine.kind must be laya, openrouter or jev")
+        if eng.get("kind") not in ("laya", "jev"):
+            raise HTTPException(400, "decision_engine.kind must be laya or jev")
         eng = {"kind": eng["kind"], "model": (eng.get("model") or None)}
     secrets_store.set_prefs(openrouter_model=body.openrouter_model, decision_engine=eng)
     return {"ok": True, "openrouter_model": get_openrouter_model(), "decision_engine": get_decision_engine()}
