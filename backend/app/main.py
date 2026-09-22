@@ -638,6 +638,14 @@ async def learn_ask(req: LearnRequest):
     return StreamingResponse(gen(), media_type="application/x-ndjson", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@app.get("/api/learn/i18n")
+async def learn_i18n(lang: str = "Auto"):
+    """Intro text, placeholder and starter questions in the chosen language (translated once, cached)."""
+    from . import i18n
+
+    return await i18n.strings(lang)
+
+
 @app.get("/api/learn/sessions")
 async def learn_sessions():
     from . import sessions

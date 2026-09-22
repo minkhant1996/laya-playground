@@ -4,14 +4,18 @@ import { api } from '../api'
 import type { ChatSessionSummary, LearnDoc, LearnMsg } from '../types'
 import LangPicker from './LangPicker'
 
-const STARTERS = [
-  'What is a System One model and how is it different from an LLM?',
-  'When should I use choice vs score vs noul?',
-  'How do I structure the state for a support ticket?',
-  'Explain confidence-gated routing with an example.',
-  'What is speculative fan-out?',
-  'How does Laya differ from Jev?',
-]
+const DEFAULT_UI = {
+  intro: 'Ask anything about System One models, Jev, Laya, the three question types, confidence, or the design patterns, in any language. I answer in your language, only from the documents in the hub, and cite them.',
+  placeholder: 'Ask about System One, Jev or Laya…',
+  starters: [
+    'What is a System One model and how is it different from an LLM?',
+    'When should I use choice vs score vs noul?',
+    'How do I structure the state for a support ticket?',
+    'Explain confidence-gated routing with an example.',
+    'What is speculative fan-out?',
+    'How does Laya differ from Jev?',
+  ],
+}
 
 function md(text: string) {
   return { __html: marked.parse(text, { async: false }) as string }
@@ -36,6 +40,8 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
     }
   })
   const bottom = useRef<HTMLDivElement>(null)
+  const [ui, setUi] = useState(DEFAULT_UI)
+  const [uiLoading, setUiLoading] = useState(false)
 
   const loadSessions = () => api.learnSessions().then(setSessions).catch(() => setSessions([]))
   useEffect(() => {
@@ -62,6 +68,20 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
     if (id === sessionId) newSession()
     loadSessions()
   }
+  useEffect(() => {
+    let alive = true
+    setUiLoading(true)
+    api
+      .learnI18n(lang)
+      .then((r) => {
+        if (alive) setUi({ intro: r.intro, placeholder: r.placeholder, starters: r.starters })
+      })
+      .catch(() => alive && setUi(DEFAULT_UI))
+      .finally(() => alive && setUiLoading(false))
+    return () => {
+      alive = false
+    }
+  }, [lang])
   useEffect(() => {
     if (!viewing) return
     const h = (e: KeyboardEvent) => e.key === 'Escape' && setViewing(null)
@@ -179,9 +199,9 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
           <div className="chat">
             {msgs.length === 0 && (
               <div className="msg assistant">
-                <p>Ask anything about System One models, Jev, Laya, the three question types, confidence, or the design patterns, in any language. I answer in your language, only from the documents in the hub, and cite them.</p>
-                <div className="suggest">
-                  {STARTERS.map((s) => (
+                <p style={{ opacity: uiLoading ? 0.6 : 1 }}>{ui.intro}</p>
+                <div className="suggest" style={{ opacity: uiLoading ? 0.6 : 1 }}>
+                  {ui.starters.map((s) => (
                     <button key={s} className="chip" onClick={() => ask(s)} disabled={!aiEnabled}>
                       {s}
                     </button>
@@ -226,7 +246,7 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
           </div>
           <div className="composer">
             <textarea
-              placeholder={`Ask about System One, Jev or Laya…  (answered by ${textModel || 'the text model'} from the hub only)`}
+              placeholder={`${ui.placeholder}  (${textModel || 'text model'})`}
               value={input}
               disabled={!aiEnabled || busy}
               onChange={(e) => setInput(e.target.value)}

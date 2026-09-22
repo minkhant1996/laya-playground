@@ -118,6 +118,7 @@ export const api = {
     if (!done) throw new Error('stream ended without an answer')
     return done
   },
+  learnI18n: (lang: string) => req<{ lang: string; intro: string; placeholder: string; starters: string[]; fallback?: boolean }>(`/learn/i18n?lang=${encodeURIComponent(lang)}`),
   learnSessions: () => req<ChatSessionSummary[]>('/learn/sessions'),
   learnSession: (id: string) => req<{ id: string; title: string; messages: LearnMsg[] }>(`/learn/sessions/${id}`),
   deleteLearnSession: (id: string) => req<{ ok: boolean }>(`/learn/sessions/${id}`, { method: 'DELETE' }),
