@@ -89,3 +89,63 @@ export interface UploadResult {
   labels: string[]
   preview: Record<string, unknown>[]
 }
+
+export interface Engine {
+  kind: 'laya' | 'openrouter' | 'jev'
+  model?: string | null
+}
+
+export interface ORModel {
+  id: string
+  name: string
+  context: number | null
+  prompt_price: number
+  completion_price: number
+  structured: boolean
+}
+
+export interface UsageBucket {
+  key?: string
+  calls: number
+  errors: number
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number
+  avg_latency_ms: number
+}
+
+export interface UsageEntry {
+  ts: number
+  purpose: string
+  engine: string
+  model: string | null
+  input_tokens: number | null
+  output_tokens: number | null
+  cost_usd: number | null
+  latency_ms: number | null
+  ok: boolean
+  error?: string | null
+  questions?: number
+}
+
+export interface UsageSummary {
+  total: UsageBucket
+  by_model: UsageBucket[]
+  by_purpose: UsageBucket[]
+  by_day: UsageBucket[]
+  recent: UsageEntry[]
+}
+
+export type EvalEvent =
+  | { type: 'status'; message: string }
+  | { type: 'start'; n: number; labels: string[]; criteria: Record<string, string>; engine: Engine }
+  | { type: 'row'; i: number; n: number; row: EvalRow; accuracy: number; elapsed: number; eta: number }
+  | { type: 'done'; result: EvalResult }
+  | { type: 'error'; message: string }
+
+export interface ChatTurn {
+  reply: string
+  spec: { state: State; questions: Questions } | null
+  result: PredictResult | null
+  explanation: string | null
+}

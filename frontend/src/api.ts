@@ -1,4 +1,4 @@
-import type { DatasetInfo, DatasetSource, EvalResult, InspectResult, PredictResult, Questions, State, UploadResult } from './types'
+import type { ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, ORModel, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`/api${path}`, {
@@ -18,9 +18,34 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => req<{ ok: boolean; openrouter_configured: boolean; openrouter_model: string }>('/health'),
-  predict: (state: State, questions: Questions) =>
-    req<PredictResult>('/predict', { method: 'POST', body: JSON.stringify({ state, questions }) }),
+  health: () => req<{ ok: boolean; openrouter_configured: boolean; openrouter_model: string; decision_engine: Engine }>('/health'),
+  predict: (state: State, questions: Questions, engine?: Engine | null) =>
+    req<PredictResult>('/predict', { method: 'POST', body: JSON.stringify({ state, questions, engine: engine ?? undefined }) }),
+  orModels: () => req<ORModel[]>('/openrouter/models'),
+  chat: (messages: { role: 'user' | 'assistant'; content: string }[], engine?: Engine | null) =>
+    req<ChatTurn>('/chat', { method: 'POST', body: JSON.stringify({ messages, engine: engine ?? undefined }) }),
+  usage: (days?: number) => req<UsageSummary>(`/usage?limit=300${days ? `&days=${days}` : ''}`),
+  clearUsage: () => req<{ ok: boolean }>('/usage', { method: 'DELETE' }),
+  skill: () => req<{ sources: string[]; guide: string }>('/skill'),
+  /** Streams NDJSON progress events; resolves when the stream ends. */
+  evaluateStream: async (body: Record<string, unknown>, onEvent: (e: EvalEvent) => void, signal?: AbortSignal) => {
+    const r = await fetch('/api/datasets/evaluate/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })
+    if (!r.ok || !r.body) throw new Error((await r.json().catch(() => ({}))).detail ?? r.statusText)
+    const reader = r.body.getReader()
+    const dec = new TextDecoder()
+    let buf = ''
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buf += dec.decode(value, { stream: true })
+      let nl
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim()
+        buf = buf.slice(nl + 1)
+        if (line) onEvent(JSON.parse(line))
+      }
+    }
+  },
   prepare: (description: string, sample_text?: string) =>
     req<{ state: State | null; questions: Questions; model: string }>('/ai/prepare', {
       method: 'POST',
@@ -50,6 +75,9 @@ export interface SettingsInfo {
   openrouter_key_masked: string | null
   openrouter_key_source: 'ui' | 'env' | null
   openrouter_model: string
+  decision_engine: Engine
+  typesafe_key_set: boolean
+  typesafe_key_masked: string | null
 }
 
 export const settingsApi = {
@@ -60,4 +88,8 @@ export const settingsApi = {
       body: JSON.stringify({ api_key, model: model || undefined }),
     }),
   clearKey: () => req<{ ok: boolean }>('/settings/openrouter', { method: 'DELETE' }),
+  setPrefs: (body: { openrouter_model?: string; decision_engine?: Engine }) =>
+    req<{ ok: boolean; openrouter_model: string; decision_engine: Engine }>('/settings/prefs', { method: 'PUT', body: JSON.stringify(body) }),
+  setTypesafeKey: (api_key: string) => req<{ ok: boolean; masked: string }>('/settings/typesafe', { method: 'PUT', body: JSON.stringify({ api_key }) }),
+  clearTypesafeKey: () => req<{ ok: boolean }>('/settings/typesafe', { method: 'DELETE' }),
 }

@@ -1,0 +1,94 @@
+"""Conversational layer: the OpenRouter text model talks with the user, prepares the
+Laya/Jev questions JSON when it has enough information, the decision engine answers them,
+and the text model explains the result in plain language."""
+import json
+from typing import Any
+
+from . import laya_service, openrouter
+from .question_guide import guide
+
+CHAT_SYSTEM = """You are the assistant inside the Laya Playground. Laya (and TypeSafe's Jev) are fast
+"System One" decision models: they take a STATE (text or JSON) plus typed QUESTIONS and return
+calibrated answers. They never write text. Your job is to help the user use them.
+
+Question types:
+- "choice": {"type":"choice","instructions":"...?","criteria":{option: "short rubric", ...}}
+- "score":  {"type":"score","instructions":"...?","criteria":["level 0 (low)", ..., "level N (high)"]}
+- "noul":   {"type":"noul","instructions":"yes/no question?"}
+Option names are short snake_case. Ask several small questions rather than one big one.
+
+How to behave:
+1. Talk naturally and briefly. If the user's goal or the input text is unclear, ask ONE short
+   clarifying question instead of guessing.
+2. When you have enough (what to decide + the text/state to decide about), produce a spec.
+   If the user gave the text to analyse, put it in "state" verbatim (string or JSON object).
+3. When answers come back you will be shown them; explain them plainly, mention confidence,
+   and suggest a follow-up or refinement if useful.
+
+ALWAYS respond with ONLY a JSON object:
+{"reply": "<your message to the user, markdown allowed>",
+ "spec": null | {"state": <string|object>, "questions": {<id>: <question>}}}
+Set "spec" only when it should be executed right now.
+
+Guidance on writing good questions (from the TypeSafe/Jev agent skill):
+"""
+
+EXPLAIN_SYSTEM = """You are the assistant inside the Laya Playground. The decision model just answered the
+user's questions. Explain the result to the user in a few short sentences: the decisions, how
+confident the model was (probabilities), anything surprising, and one concrete suggestion for
+a follow-up question or refinement. Plain language, markdown allowed, no JSON."""
+
+
+def _answers_brief(result: dict[str, Any]) -> str:
+    lines = []
+    for qid, a in (result.get("answers") or {}).items():
+        t = a.get("type")
+        if t == "choice":
+            probs = a.get("probabilities") or {}
+            top = sorted(probs.items(), key=lambda kv: -kv[1])[:4]
+            lines.append(f"- {qid}: choice = {a.get('choice')} (confidence {a.get('confidence')}); probabilities {dict(top)}")
+        elif t == "score":
+            lines.append(f"- {qid}: score = {a.get('score')} (confidence {a.get('confidence')}); probabilities {a.get('probabilities')}")
+        else:
+            lines.append(f"- {qid}: yes-probability = {a.get('noul')}")
+    routing = result.get("routing") or {}
+    lines.append(f"(engine: {routing.get('model')})")
+    return "\n".join(lines)
+
+
+async def turn(messages: list[dict[str, str]], engine: dict[str, Any] | None) -> dict[str, Any]:
+    """One chat turn. Returns {reply, spec?, result?, explanation?}."""
+    history = [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] in ("user", "assistant")]
+    out = await openrouter.chat_messages([{"role": "system", "content": CHAT_SYSTEM + guide(4000)}, *history], purpose="chat", json_mode=True)
+    reply = str(out.get("reply") or "")
+    spec = out.get("spec")
+    resp: dict[str, Any] = {"reply": reply, "spec": None, "result": None, "explanation": None}
+    if not spec or not isinstance(spec, dict) or not spec.get("questions"):
+        return resp
+    state = spec.get("state")
+    if state in (None, ""):
+        resp["reply"] = reply + "\n\nI have the questions ready, but I need the text or data to analyse. Paste it and I will run it."
+        resp["spec"] = spec
+        return resp
+    resp["spec"] = spec
+    try:
+        result = await laya_service.decide(state, spec["questions"], engine)
+    except Exception as e:
+        resp["reply"] = reply + f"\n\nI prepared the questions but running the decision model failed: {e}"
+        return resp
+    resp["result"] = result
+    try:
+        explanation = await openrouter.chat_messages(
+            [
+                {"role": "system", "content": EXPLAIN_SYSTEM},
+                *history[-6:],
+                {"role": "assistant", "content": reply},
+                {"role": "user", "content": "Decision model results:\n" + _answers_brief(result) + "\n\nQuestions asked:\n" + json.dumps(spec["questions"], ensure_ascii=False)[:4000]},
+            ],
+            purpose="explain",
+            json_mode=False,
+        )
+        resp["explanation"] = str(explanation)
+    except Exception as e:
+        resp["explanation"] = f"(could not generate explanation: {e})"
+    return resp

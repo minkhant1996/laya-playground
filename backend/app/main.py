@@ -3,17 +3,22 @@ from typing import Any
 
 import asyncio
 import json
+import time
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from . import datasets_service as dsvc
+from . import usage
 from . import laya_service, openrouter
-from .config import get_openrouter_key, get_openrouter_model, settings
+from .config import get_decision_engine, get_openrouter_key, get_openrouter_model, settings
 from . import secrets_store
+from typing import Literal
+
 from pydantic import BaseModel, Field as PField
 from .schemas import (
-    DatasetInfo, DatasetSource, EvaluateRequest, EvaluateResponse, EvaluateRow,
+    DatasetInfo, DatasetSource, Engine, EvaluateRequest, EvaluateResponse, EvaluateRow,
     PredictRequest, PrepareRequest, PrepareResponse,
 )
 
@@ -32,6 +37,7 @@ async def health():
         "ok": True,
         "openrouter_configured": bool(get_openrouter_key()),
         "openrouter_model": get_openrouter_model(),
+        "decision_engine": get_decision_engine(),
     }
 
 
@@ -39,9 +45,9 @@ async def health():
 async def predict(req: PredictRequest) -> dict[str, Any]:
     questions = {k: v.model_dump(exclude_none=True) for k, v in req.questions.items()}
     try:
-        return await laya_service.predict(req.state, questions)
+        return await laya_service.decide(req.state, questions, req.engine.model_dump() if req.engine else None)
     except Exception as e:  # surface model errors to the UI
-        raise HTTPException(500, f"laya error: {e}")
+        raise HTTPException(500, f"decision error: {e}")
 
 
 @app.post("/api/ai/prepare", response_model=PrepareResponse)
@@ -55,6 +61,27 @@ async def prepare(req: PrepareRequest):
         )
     except Exception as e:
         raise HTTPException(502, f"OpenRouter error: {e}")
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = PField(max_length=20000)
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage] = PField(min_length=1, max_length=60)
+    engine: Engine | None = None
+
+
+@app.post("/api/chat")
+async def chat_turn(req: ChatRequest):
+    """Conversational playground: text model prepares questions, decision model answers, text model explains."""
+    from . import chat
+
+    try:
+        return await chat.turn([m.model_dump() for m in req.messages], req.engine.model_dump() if req.engine else None)
+    except Exception as e:
+        raise HTTPException(502, f"chat failed: {e}")
 
 
 @app.get("/api/datasets", response_model=list[DatasetInfo])
@@ -136,67 +163,105 @@ async def _resolve_source(req: EvaluateRequest):
     return path, ds, text_col, label_col
 
 
-@app.post("/api/datasets/evaluate", response_model=EvaluateResponse)
-async def evaluate(req: EvaluateRequest):
-    try:
-        name, ds, text_col, label_col = await _resolve_source(req)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(502, f"dataset load failed: {e}")
+async def _evaluate_events(req: EvaluateRequest):
+    """Async generator of progress events; the last one is {"type": "done", "result": ...}."""
+    yield {"type": "status", "message": "loading dataset"}
+    name, ds, text_col, label_col = await _resolve_source(req)
 
     names = dsvc.label_names(ds, label_col)
     ids = [dsvc.to_label_id(n) for n in names]
-    is_int_label = ds.features[label_col].dtype in ("int64", "int32", "int8", "int16") if hasattr(ds.features[label_col], "dtype") else getattr(ds.features[label_col], "names", None) is not None
+    feat = ds.features[label_col]
+    is_int_label = getattr(feat, "names", None) is not None or str(getattr(feat, "dtype", "")).startswith("int")
 
-    # criteria: user-provided > AI-generated > label name
     criteria = {lid: lid.replace("_", " ") for lid in ids}
     if req.criteria:
         criteria.update({dsvc.to_label_id(k): v for k, v in req.criteria.items() if dsvc.to_label_id(k) in criteria})
     elif req.use_ai_criteria and get_openrouter_key():
+        yield {"type": "status", "message": f"writing criteria for {len(ids)} labels with {get_openrouter_model()}"}
         try:
             criteria = await openrouter.describe_labels(name, ids)
-        except Exception:
-            pass  # fall back silently to plain names
+        except Exception as e:
+            yield {"type": "status", "message": f"AI criteria failed ({e}); using label names"}
 
-    question = {
-        "label": {
-            "type": "choice",
-            "instructions": req.question_instructions or "Which category does this text belong to?",
-            "criteria": criteria,
-        }
-    }
-    shortlist_k = req.shortlist_k if req.shortlist_k and req.shortlist_k < len(ids) else None
+    question = {"label": {"type": "choice", "instructions": req.question_instructions or "Which category does this text belong to?", "criteria": criteria}}
+    engine = req.engine.model_dump() if req.engine else get_decision_engine()
+    shortlist_k = req.shortlist_k if engine.get("kind") == "laya" and req.shortlist_k and req.shortlist_k < len(ids) else None
 
-    end = min(req.offset + req.limit, len(ds))
     if req.offset >= len(ds):
         raise HTTPException(400, f"offset beyond dataset size ({len(ds)})")
+    end = min(req.offset + req.limit, len(ds))
     subset = ds.select(range(req.offset, end))
+    n_total = len(subset)
+    yield {"type": "start", "n": n_total, "labels": ids, "criteria": criteria, "engine": engine}
+
     rows: list[EvaluateRow] = []
     routing = None
     per = defaultdict(lambda: {"n": 0, "correct": 0})
-    for ex in subset:
+    correct = 0
+    t0 = time.perf_counter()
+    for i, ex in enumerate(subset):
         text = str(ex[text_col])
         gold_raw = ex[label_col]
         gold = ids[int(gold_raw)] if is_int_label and str(gold_raw).lstrip("-").isdigit() and int(gold_raw) < len(ids) else dsvc.to_label_id(str(gold_raw))
         try:
-            res = await laya_service.predict(text, question, shortlist_k)
+            res = await laya_service.decide(text, question, engine, shortlist_k)
         except Exception as e:
-            raise HTTPException(500, f"laya error: {e}")
+            raise HTTPException(500, f"decision error on sample {i + 1}: {e}")
         routing = routing or res.get("routing")
         pred, conf = laya_service.extract_choice(res, "label")
         ok = pred == gold
+        correct += int(ok)
         per[gold]["n"] += 1
         per[gold]["correct"] += int(ok)
-        rows.append(EvaluateRow(text=text, gold=gold, pred=pred, confidence=conf, correct=ok))
+        row = EvaluateRow(text=text, gold=gold, pred=pred, confidence=conf, correct=ok)
+        rows.append(row)
+        elapsed = time.perf_counter() - t0
+        yield {"type": "row", "i": i + 1, "n": n_total, "row": row.model_dump(), "accuracy": correct / (i + 1),
+               "elapsed": round(elapsed, 1), "eta": round(elapsed / (i + 1) * (n_total - i - 1), 1)}
 
     n = len(rows)
-    acc = sum(r.correct for r in rows) / n if n else 0.0
-    per_label = {k: {"n": v["n"], "accuracy": v["correct"] / v["n"]} for k, v in per.items()}
-    return EvaluateResponse(
-        dataset_id=name, shortlist_k=shortlist_k, n=n, accuracy=acc, labels=ids, criteria=criteria,
-        routing=routing, rows=rows, per_label=per_label,
+    result = EvaluateResponse(
+        dataset_id=name, shortlist_k=shortlist_k, n=n, accuracy=(correct / n if n else 0.0), labels=ids, criteria=criteria,
+        routing=routing, rows=rows, per_label={k: {"n": v["n"], "accuracy": v["correct"] / v["n"]} for k, v in per.items()},
     )
+    yield {"type": "done", "result": result.model_dump()}
+
+
+@app.post("/api/datasets/evaluate", response_model=EvaluateResponse)
+async def evaluate(req: EvaluateRequest):
+    result = None
+    try:
+        async for ev in _evaluate_events(req):
+            if ev["type"] == "done":
+                result = ev["result"]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"evaluation failed: {e}")
+    return result
+
+
+@app.post("/api/datasets/evaluate/stream")
+async def evaluate_stream(req: EvaluateRequest):
+    """Newline-delimited JSON progress events for a live UI."""
+    async def gen():
+        try:
+            async for ev in _evaluate_events(req):
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+        except HTTPException as e:
+            yield json.dumps({"type": "error", "message": e.detail}) + "\n"
+        except Exception as e:
+            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/openrouter/models")
+async def openrouter_models(refresh: bool = False):
+    try:
+        return await openrouter.list_models(force=refresh)
+    except Exception as e:
+        raise HTTPException(502, f"could not list OpenRouter models: {e}")
 
 
 # ---------------------------------------------------------------- settings / API key
@@ -213,7 +278,70 @@ async def get_settings():
         "openrouter_key_masked": secrets_store.mask(key) if key else None,
         "openrouter_key_source": "ui" if secrets_store.get_secret("openrouter_api_key") else ("env" if key else None),
         "openrouter_model": get_openrouter_model(),
+        "decision_engine": get_decision_engine(),
+        "typesafe_key_set": bool(openrouter.get_typesafe_key()),
+        "typesafe_key_masked": secrets_store.mask(openrouter.get_typesafe_key()) if openrouter.get_typesafe_key() else None,
     }
+
+
+class TypesafeKeyUpdate(BaseModel):
+    api_key: str = PField(min_length=10, max_length=300, pattern=r"^[A-Za-z0-9_\-\.]+$")
+
+
+@app.put("/api/settings/typesafe")
+async def set_typesafe_key(body: TypesafeKeyUpdate):
+    """Verify a TypeSafe (Jev) key with a one-question call, then store it encrypted."""
+    try:
+        await openrouter.jev_decide("ping", {"ok": {"type": "noul", "instructions": "Is this a greeting?"}}, api_key=body.api_key)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"could not reach TypeSafe: {e}")
+    secrets_store.set_secret("typesafe_api_key", body.api_key)
+    return {"ok": True, "masked": secrets_store.mask(body.api_key)}
+
+
+@app.delete("/api/settings/typesafe")
+async def delete_typesafe_key():
+    secrets_store.delete_secret("typesafe_api_key")
+    return {"ok": True}
+
+
+@app.get("/api/usage")
+async def get_usage(limit: int = 200, days: int | None = None):
+    since = time.time() - days * 86400 if days else None
+    return usage.summary(limit=min(limit, 1000), since=since)
+
+
+@app.delete("/api/usage")
+async def clear_usage():
+    usage.clear()
+    return {"ok": True}
+
+
+@app.get("/api/skill")
+async def skill_info():
+    """What the JSON preparer was taught (from the TypeSafe/Jev agent skill)."""
+    from . import question_guide
+
+    return {"sources": question_guide.sources(), "guide": question_guide.guide()}
+
+
+class PrefsUpdate(BaseModel):
+    openrouter_model: str | None = PField(default=None, max_length=120)
+    decision_engine: dict | None = None
+
+
+@app.put("/api/settings/prefs")
+async def set_prefs(body: PrefsUpdate):
+    """Non-secret preferences: JSON-preparer model and decision engine."""
+    eng = body.decision_engine
+    if eng is not None:
+        if eng.get("kind") not in ("laya", "openrouter", "jev"):
+            raise HTTPException(400, "decision_engine.kind must be laya, openrouter or jev")
+        eng = {"kind": eng["kind"], "model": (eng.get("model") or None)}
+    secrets_store.set_prefs(openrouter_model=body.openrouter_model, decision_engine=eng)
+    return {"ok": True, "openrouter_model": get_openrouter_model(), "decision_engine": get_decision_engine()}
 
 
 @app.put("/api/settings/openrouter")
@@ -227,12 +355,11 @@ async def set_openrouter_key(body: KeyUpdate):
         raise HTTPException(502, f"could not reach OpenRouter: {e}")
     secrets_store.set_secret("openrouter_api_key", body.api_key)
     if body.model:
-        secrets_store.set_secret("openrouter_model", body.model.strip())
+        secrets_store.set_prefs(openrouter_model=body.model.strip())
     return {"ok": True, "masked": secrets_store.mask(body.api_key), "label": info.get("label"), "model": get_openrouter_model()}
 
 
 @app.delete("/api/settings/openrouter")
 async def delete_openrouter_key():
     secrets_store.delete_secret("openrouter_api_key")
-    secrets_store.delete_secret("openrouter_model")
     return {"ok": True}

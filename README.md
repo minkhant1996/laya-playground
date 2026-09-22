@@ -3,16 +3,23 @@
 Frontend (Vite + React + TypeScript) and backend (FastAPI) around the
 [convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) decision model.
 
-- **Playground** – give Laya a state (text / JSON) and typed questions (`choice`, `score`, `noul`),
-  get calibrated answers in one forward pass.
-- **AI layer (OpenRouter)** – describe in plain English what you want to decide; an LLM on OpenRouter
-  writes the Laya questions JSON for you. Also used to write label descriptions for datasets.
+- **Playground (chat)** – talk to a text model of your choice from OpenRouter. It asks what you
+  want to decide, turns it into typed questions (`choice`, `score`, `noul`), runs the decision
+  model, and explains the answers. An *Advanced* panel exposes the raw state/questions JSON.
+- **Decision model** – Laya (local), any OpenRouter LLM (answers the same typed questions), or
+  TypeSafe's hosted **Jev** via its API. Chosen in Settings, overridable per chat / per eval.
+- **TypeSafe / Jev agent skill** – `backend/skills/` holds the skill (`SKILL.md`) and primitive docs
+  fetched from docs.typesafe.ai. Laya and Jev share the same question schema, so the distilled
+  question-writing guidance is injected into the text model's prompt. `GET /api/skill` shows it.
+- **Usage tab** – every model call (chat, prepare, criteria, decide, explain) is logged with tokens,
+  latency and estimated OpenRouter cost, with breakdowns by model, purpose and day.
 - **Dataset eval** – run Laya as a zero-shot classifier and see accuracy, from three sources:
   - presets (Banking77, DAIR Emotion, AG News, TweetEval sentiment, SST-2, CLINC150),
   - any Hugging Face dataset link or id (`https://huggingface.co/datasets/owner/name`, `owner/name`, `owner/name:config`),
     downloaded on demand with text/label columns auto-guessed and editable,
   - your own JSON / JSONL / CSV file (list of `{text, label}` records or a HF rows export).
   Optional *shortlist k* embeds labels and asks Laya only over the top-k for many-label sets.
+  Evaluation streams live progress (sample count, running accuracy, ETA, latest rows) and can be stopped.
 - **Settings** – save the OpenRouter key from the UI (see Security below).
 
 ## Run
@@ -44,6 +51,13 @@ First model load downloads ~2 GB of checkpoints. Without a GPU, evaluation is ro
 | POST | `/api/datasets/inspect` | `{ref}` HF link/id → configs, splits, columns, label names |
 | POST | `/api/datasets/upload` | multipart `.json/.jsonl/.csv` → `upload_id` + columns |
 | POST | `/api/datasets/evaluate` | `{source:{kind: preset|hf|upload, …}, split, limit, offset, shortlist_k?, use_ai_criteria}` → accuracy + rows |
+| POST | `/api/chat` | `{messages, engine?}` → `{reply, spec, result, explanation}` |
+| POST | `/api/datasets/evaluate/stream` | same body as evaluate; NDJSON events `status/start/row/done/error` |
+| GET | `/api/openrouter/models` | every OpenRouter model with context and prices (cached 10 min) |
+| GET | `/api/usage?days=7` · DELETE | usage totals, breakdowns, recent calls |
+| GET | `/api/skill` | sources + distilled guidance from the TypeSafe/Jev skill |
+| PUT | `/api/settings/prefs` | `{openrouter_model?, decision_engine?}` |
+| PUT/DELETE | `/api/settings/typesafe` | TypeSafe (Jev) API key, verified then stored encrypted |
 | GET | `/api/settings` | masked key status |
 | PUT | `/api/settings/openrouter` | `{api_key, model?}` verify with OpenRouter, then store encrypted |
 | DELETE | `/api/settings/openrouter` | remove the UI-saved key |

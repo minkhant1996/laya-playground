@@ -1,156 +1,180 @@
-import { useState } from 'react'
+import { marked } from 'marked'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
-import type { PredictResult, Questions, State } from '../types'
+import type { Engine, PredictResult, Questions, State } from '../types'
+import AnswerList from './AnswerList'
+import EnginePicker from './EnginePicker'
 
-const DEFAULT_STATE = {
-  from: 'user@acme.com',
-  subject: 'Duplicate charge on invoice #4411',
-  body: 'Hi, we were billed twice for March. Please refund the duplicate today or we will cancel our plan.',
+interface Msg {
+  role: 'user' | 'assistant'
+  content: string
+  result?: PredictResult | null
+  spec?: { state: State; questions: Questions } | null
 }
 
+const SUGGESTIONS = [
+  'Is this support email urgent, and which team should handle it? "Hi, we were billed twice for March. Refund it today or we cancel."',
+  'Rate how positive these reviews are, 0 to 4: "Great battery, awful screen."',
+  'Does this message contain a threat to leave? "If this happens again I am switching providers."',
+  'Route this Hindi message to billing / technical / sales: "मेरा भुगतान दो बार कट गया है"',
+]
+
 const DEFAULT_QUESTIONS: Questions = {
-  department: {
-    type: 'choice',
-    instructions: 'Which department should handle this request?',
-    criteria: {
-      billing: 'invoices, payments, refunds',
-      technical: 'bugs, outages, system errors',
-      sales: 'pricing, new contracts',
-      other: 'everything else',
-    },
-  },
-  urgency: {
-    type: 'score',
-    instructions: 'How urgent is this request?',
-    criteria: ['not urgent', 'soon', 'critical deadline or blocking issue'],
-  },
+  department: { type: 'choice', instructions: 'Which department should handle this request?', criteria: { billing: 'invoices, payments, refunds', technical: 'bugs, outages, system errors', sales: 'pricing, new contracts', other: 'everything else' } },
+  urgency: { type: 'score', instructions: 'How urgent is this request?', criteria: ['not urgent', 'soon', 'critical deadline or blocking issue'] },
   churn_risk: { type: 'noul', instructions: 'Does the user threaten to cancel or leave?' },
 }
 
-function parseState(s: string): State {
-  const t = s.trim()
-  if (t.startsWith('{')) return JSON.parse(t)
-  return t
+function md(text: string) {
+  return { __html: marked.parse(text, { async: false }) as string }
 }
 
-export default function Playground({ aiEnabled }: { aiEnabled: boolean }) {
-  const [stateText, setStateText] = useState(JSON.stringify(DEFAULT_STATE, null, 2))
-  const [questionsText, setQuestionsText] = useState(JSON.stringify(DEFAULT_QUESTIONS, null, 2))
-  const [description, setDescription] = useState('')
-  const [result, setResult] = useState<PredictResult | null>(null)
+export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: { aiEnabled: boolean; defaultEngine: Engine; typesafeReady: boolean }) {
+  const [msgs, setMsgs] = useState<Msg[]>([])
+  const [input, setInput] = useState('')
+  const [engine, setEngine] = useState<Engine>(defaultEngine)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState<'predict' | 'ai' | null>(null)
+  const [advanced, setAdvanced] = useState(false)
+  const [stateText, setStateText] = useState('')
+  const [questionsText, setQuestionsText] = useState(JSON.stringify(DEFAULT_QUESTIONS, null, 2))
+  const [advResult, setAdvResult] = useState<PredictResult | null>(null)
+  const bottom = useRef<HTMLDivElement>(null)
 
-  async function runPredict() {
+  useEffect(() => setEngine(defaultEngine), [defaultEngine])
+  useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [msgs, busy])
+
+  async function send(text: string) {
+    const content = text.trim()
+    if (!content || busy) return
     setError('')
-    setBusy('predict')
+    const next: Msg[] = [...msgs, { role: 'user', content }]
+    setMsgs(next)
+    setInput('')
+    setBusy(true)
     try {
-      const r = await api.predict(parseState(stateText), JSON.parse(questionsText))
-      setResult(r)
+      const t = await api.chat(next.map((m) => ({ role: m.role, content: m.content })), engine)
+      const reply = t.explanation ? `${t.reply}\n\n${t.explanation}` : t.reply
+      setMsgs([...next, { role: 'assistant', content: reply, result: t.result, spec: t.spec }])
+      if (t.spec) {
+        setStateText(typeof t.spec.state === 'string' ? t.spec.state : JSON.stringify(t.spec.state, null, 2))
+        setQuestionsText(JSON.stringify(t.spec.questions, null, 2))
+        setAdvResult(t.result)
+      }
     } catch (e) {
-      setError(String((e as Error).message))
+      setError((e as Error).message)
+      setMsgs(next)
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
 
-  async function runPrepare() {
+  async function runAdvanced() {
     setError('')
-    setBusy('ai')
+    setBusy(true)
     try {
-      const r = await api.prepare(description, stateText.trim() || undefined)
-      setQuestionsText(JSON.stringify(r.questions, null, 2))
-      if (r.state && !stateText.trim()) {
-        setStateText(typeof r.state === 'string' ? r.state : JSON.stringify(r.state, null, 2))
-      }
+      const st = stateText.trim().startsWith('{') ? JSON.parse(stateText) : stateText
+      setAdvResult(await api.predict(st, JSON.parse(questionsText), engine))
     } catch (e) {
-      setError(String((e as Error).message))
+      setError((e as Error).message)
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
 
   return (
-    <div className="grid">
-      <div>
-        <section className="panel">
-          <h2>AI layer · describe what to decide</h2>
-          <textarea
-            rows={3}
-            placeholder="e.g. Classify support emails into billing/technical/sales, rate urgency 0-2, and flag churn risk"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <div className="row">
-            <button className="primary" disabled={!aiEnabled || !description.trim() || busy !== null} onClick={runPrepare}>
-              {busy === 'ai' ? 'Generating…' : 'Generate questions JSON'}
-            </button>
-            {!aiEnabled && <span className="small">Add an OpenRouter key in Settings to enable.</span>}
-          </div>
-        </section>
-
-        <section className="panel" style={{ marginTop: 16 }}>
-          <h2>State (text or JSON)</h2>
-          <textarea className="code" style={{ minHeight: 140 }} value={stateText} onChange={(e) => setStateText(e.target.value)} />
-        </section>
-
-        <section className="panel" style={{ marginTop: 16 }}>
-          <h2>Questions JSON</h2>
-          <textarea className="code" value={questionsText} onChange={(e) => setQuestionsText(e.target.value)} />
-          <div className="row">
-            <button className="primary" disabled={busy !== null} onClick={runPredict}>
-              {busy === 'predict' ? 'Running…' : 'Run Laya'}
-            </button>
-            <button
-              className="ghost"
-              onClick={() => {
-                setStateText(JSON.stringify(DEFAULT_STATE, null, 2))
-                setQuestionsText(JSON.stringify(DEFAULT_QUESTIONS, null, 2))
-              }}
-            >
-              Reset example
-            </button>
-          </div>
-          {error && <div className="error">{error}</div>}
-        </section>
-      </div>
-
+    <div>
       <section className="panel">
-        <h2>Answers</h2>
-        {!result && <div className="small">Run a prediction to see typed answers with calibrated confidence.</div>}
-        {result && (
-          <>
-            <div className="answers">
-              {Object.entries(result.answers).map(([name, a]) => {
-                const value =
-                  a.type === 'choice' ? a.choice : a.type === 'score' ? a.score : `${((a.noul ?? 0) * 100).toFixed(1)}% yes`
-                const conf = a.confidence ?? (a.type === 'noul' ? Math.max(a.noul ?? 0, 1 - (a.noul ?? 0)) : 0)
-                return (
-                  <div key={name} className="answer">
-                    <div style={{ flex: 1 }}>
-                      <div className="q">
-                        {name} · {a.type}
-                      </div>
-                      <div className="v">{String(value)}</div>
-                      <div className="bar">
-                        <div style={{ width: `${Math.round(conf * 100)}%` }} />
-                      </div>
-                    </div>
-                    <div className="small">{(conf * 100).toFixed(1)}%</div>
-                  </div>
-                )
-              })}
-            </div>
-            {result.routing && (
-              <div className="routing">
-                routed to <b>{result.routing.model}</b> — {result.routing.reason}
+        <h2>Decision model for this chat</h2>
+        <EnginePicker value={engine} onChange={setEngine} compact openrouterReady={aiEnabled} typesafeReady={typesafeReady} />
+      </section>
+
+      <section className="panel" style={{ marginTop: 16 }}>
+        <h2>Chat</h2>
+        {!aiEnabled && <div className="error">Add an OpenRouter key in Settings and pick a text model to chat. You can still use the advanced JSON editor below with Laya.</div>}
+        <div className="chat">
+          {msgs.length === 0 && (
+            <div className="msg assistant">
+              <p>Hi! Tell me what you want to decide and paste the text. I will turn it into typed questions, run the decision model, and explain the result.</p>
+              <div className="suggest">
+                {SUGGESTIONS.map((s) => (
+                  <button key={s} className="chip" onClick={() => send(s)} disabled={!aiEnabled}>
+                    {s.length > 70 ? s.slice(0, 68) + '…' : s}
+                  </button>
+                ))}
               </div>
-            )}
-            <details>
-              <summary>Raw JSON</summary>
-              <pre>{JSON.stringify(result, null, 2)}</pre>
-            </details>
-          </>
+            </div>
+          )}
+          {msgs.map((m, i) => (
+            <div key={i} className={`msg ${m.role}`}>
+              <div dangerouslySetInnerHTML={md(m.content)} />
+              {m.result && <AnswerList result={m.result} />}
+              {m.spec && (
+                <details>
+                  <summary>Questions JSON used</summary>
+                  <pre>{JSON.stringify(m.spec, null, 2)}</pre>
+                </details>
+              )}
+            </div>
+          ))}
+          {busy && <div className="msg assistant small">thinking…</div>}
+          <div ref={bottom} />
+        </div>
+        <div className="composer">
+          <textarea
+            placeholder="Describe what to decide and paste the text…  (Enter to send, Shift+Enter for newline)"
+            value={input}
+            disabled={!aiEnabled || busy}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                send(input)
+              }
+            }}
+          />
+          <button className="primary" disabled={!aiEnabled || busy || !input.trim()} onClick={() => send(input)}>
+            Send
+          </button>
+          {msgs.length > 0 && (
+            <button className="ghost" onClick={() => setMsgs([])} disabled={busy}>
+              New chat
+            </button>
+          )}
+        </div>
+        {error && <div className="error">{error}</div>}
+      </section>
+
+      <section className="panel" style={{ marginTop: 16 }}>
+        <h2 style={{ cursor: 'pointer' }} onClick={() => setAdvanced(!advanced)}>
+          {advanced ? '▾' : '▸'} Advanced · edit the JSON directly
+        </h2>
+        {advanced && (
+          <div className="grid">
+            <div>
+              <div className="small">State (text or JSON)</div>
+              <textarea className="code" style={{ minHeight: 120 }} value={stateText} onChange={(e) => setStateText(e.target.value)} placeholder="Paste text or a JSON object" />
+              <div className="small" style={{ marginTop: 8 }}>Questions JSON</div>
+              <textarea className="code" value={questionsText} onChange={(e) => setQuestionsText(e.target.value)} />
+              <div className="row">
+                <button className="primary" disabled={busy || !stateText.trim()} onClick={runAdvanced}>
+                  Run
+                </button>
+                <button className="ghost" onClick={() => setQuestionsText(JSON.stringify(DEFAULT_QUESTIONS, null, 2))}>
+                  Example questions
+                </button>
+              </div>
+            </div>
+            <div>
+              {advResult ? <AnswerList result={advResult} /> : <div className="small">Answers appear here.</div>}
+              {advResult && (
+                <details>
+                  <summary>Raw JSON</summary>
+                  <pre>{JSON.stringify(advResult, null, 2)}</pre>
+                </details>
+              )}
+            </div>
+          </div>
         )}
       </section>
     </div>

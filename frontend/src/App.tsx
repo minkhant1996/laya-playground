@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react'
-import { api } from './api'
+import { api, settingsApi } from './api'
+import type { Engine } from './types'
 import Playground from './components/Playground'
 import DatasetEval from './components/DatasetEval'
 import Settings from './components/Settings'
+import Usage from './components/Usage'
 
-type Tab = 'playground' | 'datasets' | 'settings'
+type Tab = 'playground' | 'datasets' | 'settings' | 'usage'
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('playground')
   const [health, setHealth] = useState<Awaited<ReturnType<typeof api.health>> | null>(null)
 
-  const loadHealth = () => api.health().then(setHealth).catch(() => setHealth(null))
+  const [typesafeReady, setTypesafeReady] = useState(false)
+  const loadHealth = () =>
+    Promise.all([api.health().then(setHealth), settingsApi.get().then((s) => setTypesafeReady(s.typesafe_key_set))]).catch(() => setHealth(null))
+  const engine: Engine = health?.decision_engine ?? { kind: 'laya' }
   useEffect(() => {
     loadHealth()
   }, [])
@@ -21,7 +26,7 @@ export default function App() {
         <h1>Laya Playground</h1>
         <span className="status">
           {health
-            ? `backend ok · OpenRouter ${health.openrouter_configured ? health.openrouter_model : 'not configured'}`
+            ? `backend ok · text model: ${health.openrouter_configured ? health.openrouter_model : 'OpenRouter not configured'} · decisions: ${engine.kind === 'laya' ? 'Laya (local)' : engine.model}`
             : 'backend offline'}
         </span>
       </header>
@@ -35,10 +40,14 @@ export default function App() {
         <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>
           Settings
         </button>
+        <button className={tab === 'usage' ? 'active' : ''} onClick={() => setTab('usage')}>
+          Usage
+        </button>
       </nav>
-      {tab === 'playground' && <Playground aiEnabled={!!health?.openrouter_configured} />}
-      {tab === 'datasets' && <DatasetEval aiEnabled={!!health?.openrouter_configured} />}
+      {tab === 'playground' && <Playground aiEnabled={!!health?.openrouter_configured} defaultEngine={engine} typesafeReady={typesafeReady} />}
+      {tab === 'datasets' && <DatasetEval aiEnabled={!!health?.openrouter_configured} defaultEngine={engine} typesafeReady={typesafeReady} />}
       {tab === 'settings' && <Settings onChange={loadHealth} />}
+      {tab === 'usage' && <Usage />}
     </div>
   )
 }

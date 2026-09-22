@@ -71,3 +71,23 @@ def mask(value: str) -> str:
 
 def constant_time_eq(a: str, b: str) -> bool:
     return secrets.compare_digest(a.encode(), b.encode())
+
+
+# ---------------------------------------------------------------- non-secret preferences
+PREFS_FILE = DATA_DIR / "prefs.json"
+
+
+def get_prefs() -> dict:
+    try:
+        return json.loads(PREFS_FILE.read_text()) if PREFS_FILE.exists() else {}
+    except Exception:
+        return {}
+
+
+def set_prefs(**kv) -> dict:
+    with _lock:
+        p = get_prefs()
+        p.update({k: v for k, v in kv.items() if v is not None})
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        PREFS_FILE.write_text(json.dumps(p))
+    return p

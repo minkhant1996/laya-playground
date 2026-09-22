@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import EnginePicker from './EnginePicker'
 import { api } from '../api'
-import type { DatasetInfo, DatasetSource, EvalResult, InspectResult, UploadResult } from '../types'
+import type { DatasetInfo, DatasetSource, Engine, EvalResult, EvalRow, InspectResult, UploadResult } from '../types'
 
 type Mode = 'preset' | 'hf' | 'upload'
 
-export default function DatasetEval({ aiEnabled }: { aiEnabled: boolean }) {
+export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }: { aiEnabled: boolean; defaultEngine: Engine; typesafeReady: boolean }) {
   const [mode, setMode] = useState<Mode>('preset')
   const [datasets, setDatasets] = useState<DatasetInfo[]>([])
   const [datasetId, setDatasetId] = useState('banking77')
@@ -30,6 +31,12 @@ export default function DatasetEval({ aiEnabled }: { aiEnabled: boolean }) {
   const [result, setResult] = useState<EvalResult | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [engine, setEngine] = useState<Engine>(defaultEngine)
+  const [status, setStatus] = useState('')
+  const [live, setLive] = useState<{ i: number; n: number; accuracy: number; elapsed: number; eta: number } | null>(null)
+  const [liveRows, setLiveRows] = useState<EvalRow[]>([])
+  const abortRef = useRef<AbortController | null>(null)
+  useEffect(() => setEngine(defaultEngine), [defaultEngine])
 
   useEffect(() => {
     api.datasets().then(setDatasets).catch(() => setDatasets([]))
@@ -89,21 +96,33 @@ export default function DatasetEval({ aiEnabled }: { aiEnabled: boolean }) {
     setError('')
     setBusy(true)
     setResult(null)
+    setLive(null)
+    setLiveRows([])
+    setStatus('starting')
+    const ac = new AbortController()
+    abortRef.current = ac
     try {
-      setResult(
-        await api.evaluate({
-          source,
-          split,
-          limit,
-          offset,
-          use_ai_criteria: useAi && aiEnabled,
-          shortlist_k: shortlist > 1 ? shortlist : null,
-        }),
+      await api.evaluateStream(
+        { source, split, limit, offset, use_ai_criteria: useAi && aiEnabled, shortlist_k: shortlist > 1 ? shortlist : null, engine },
+        (ev) => {
+          if (ev.type === 'status') setStatus(ev.message)
+          else if (ev.type === 'start') setStatus(`running ${ev.n} samples on ${ev.engine.kind === 'laya' ? 'Laya (local)' : ev.engine.model}`)
+          else if (ev.type === 'row') {
+            setLive({ i: ev.i, n: ev.n, accuracy: ev.accuracy, elapsed: ev.elapsed, eta: ev.eta })
+            setLiveRows((r) => [ev.row, ...r].slice(0, 12))
+          } else if (ev.type === 'done') {
+            setResult(ev.result)
+            setStatus('done')
+          } else if (ev.type === 'error') setError(ev.message)
+        },
+        ac.signal,
       )
     } catch (e) {
-      setError((e as Error).message)
+      if ((e as Error).name !== 'AbortError') setError((e as Error).message)
+      else setStatus('stopped')
     } finally {
       setBusy(false)
+      abortRef.current = null
     }
   }
 
@@ -233,11 +252,61 @@ export default function DatasetEval({ aiEnabled }: { aiEnabled: boolean }) {
           <button className="primary" disabled={busy} onClick={run}>
             {busy ? 'Evaluating…' : 'Evaluate'}
           </button>
+          {busy && (
+            <button className="ghost" onClick={() => abortRef.current?.abort()}>
+              Stop
+            </button>
+          )}
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <div className="small" style={{ marginBottom: 2 }}>Decision model</div>
+          <EnginePicker value={engine} onChange={setEngine} compact openrouterReady={aiEnabled} typesafeReady={typesafeReady} />
         </div>
         {labelCount !== undefined && labelCount > 30 && shortlist === 0 && (
           <div className="small" style={{ marginTop: 6 }}>{labelCount} labels: consider a shortlist (e.g. 10) and AI criteria for better zero-shot accuracy.</div>
         )}
-        {busy && <div className="small" style={{ marginTop: 8 }}>Running Laya on each sample; first run also downloads the model.</div>}
+        {(busy || live) && (
+          <div style={{ marginTop: 10 }}>
+            <div className="live">
+              <span>
+                status: <b>{status}</b>
+              </span>
+              {live && (
+                <>
+                  <span>
+                    sample <b>{live.i}</b> / {live.n}
+                  </span>
+                  <span>
+                    running accuracy <b>{(live.accuracy * 100).toFixed(1)}%</b>
+                  </span>
+                  <span>
+                    elapsed <b>{live.elapsed}s</b>
+                  </span>
+                  <span>
+                    ETA <b>{live.eta}s</b>
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="progress">
+              <div style={{ width: live ? `${(live.i / live.n) * 100}%` : '0%' }} />
+            </div>
+            {busy && liveRows.length > 0 && (
+              <table>
+                <tbody>
+                  {liveRows.map((r, i) => (
+                    <tr key={i}>
+                      <td className="small">{r.text.length > 90 ? r.text.slice(0, 88) + '…' : r.text}</td>
+                      <td>{r.gold}</td>
+                      <td className={r.correct ? 'ok' : 'bad'}>{r.pred}</td>
+                      <td>{r.confidence != null ? `${(r.confidence * 100).toFixed(0)}%` : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
         {error && <div className="error">{error}</div>}
       </section>
 

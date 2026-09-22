@@ -39,7 +39,20 @@ def _predict_sync(state: Any, questions: dict[str, Any], shortlist_k: int | None
 
 
 async def predict(state: Any, questions: dict[str, Any], shortlist_k: int | None = None) -> dict[str, Any]:
-    return await asyncio.to_thread(_predict_sync, state, questions, shortlist_k)
+    import time
+
+    from . import usage
+
+    t0 = time.perf_counter()
+    try:
+        res = await asyncio.to_thread(_predict_sync, state, questions, shortlist_k)
+    except Exception as e:
+        usage.record(purpose="decide", engine="laya", model=None, latency_ms=(time.perf_counter() - t0) * 1000, ok=False, error=str(e))
+        raise
+    u = res.get("usage") or {}
+    usage.record(purpose="decide", engine="laya", model=(res.get("routing") or {}).get("model"), input_tokens=u.get("input_tokens"),
+                 output_tokens=u.get("output_tokens"), latency_ms=(time.perf_counter() - t0) * 1000, extra={"questions": len(questions)})
+    return res
 
 
 def extract_choice(result: dict[str, Any], qname: str) -> tuple[str, float | None]:
@@ -58,3 +71,16 @@ def extract_choice(result: dict[str, Any], qname: str) -> tuple[str, float | Non
                 conf = float(dist[choice])
                 break
     return str(choice), conf
+
+
+async def decide(state: Any, questions: dict[str, Any], engine: dict[str, Any] | None = None, shortlist_k: int | None = None) -> dict[str, Any]:
+    """Dispatch to Laya (local) or an OpenRouter LLM according to `engine`."""
+    from . import openrouter
+    from .config import get_decision_engine
+
+    engine = engine or get_decision_engine()
+    if engine.get("kind") == "openrouter":
+        return await openrouter.decide(state, questions, engine["model"])
+    if engine.get("kind") == "jev":
+        return await openrouter.jev_decide(state, questions, engine.get("model") or "jev-latest")
+    return await predict(state, questions, shortlist_k)

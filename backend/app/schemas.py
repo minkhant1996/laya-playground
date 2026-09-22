@@ -10,9 +10,15 @@ class Question(BaseModel):
     criteria: dict[str, str] | list[str] | None = None
 
 
+class Engine(BaseModel):
+    kind: Literal["laya", "openrouter", "jev"] = "laya"
+    model: str | None = None
+
+
 class PredictRequest(BaseModel):
     state: State
     questions: dict[str, Question]
+    engine: Engine | None = None
 
 
 class PrepareRequest(BaseModel):
@@ -52,6 +58,7 @@ class EvaluateRequest(BaseModel):
     dataset_id: str | None = None      # legacy shortcut for a preset
     source: DatasetSource | None = None
     shortlist_k: int | None = Field(default=None, ge=2, le=64)
+    engine: Engine | None = None
     split: str = "test"
     limit: int = Field(default=50, ge=1, le=1000)
     offset: int = 0
