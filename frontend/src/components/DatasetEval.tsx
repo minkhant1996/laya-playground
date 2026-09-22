@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import EnginePicker from './EnginePicker'
 import { api } from '../api'
-import type { DatasetInfo, DatasetSource, Engine, EvalResult, EvalRow, InspectResult, UploadResult } from '../types'
+import type { DatasetInfo, DatasetSource, Engine, EvalResult, EvalRow, InspectResult, KaggleInspect, UploadResult } from '../types'
 
-type Mode = 'preset' | 'hf' | 'upload'
+type Mode = 'preset' | 'hf' | 'upload' | 'kaggle'
 
 export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }: { aiEnabled: boolean; defaultEngine: Engine; typesafeReady: boolean }) {
   const [mode, setMode] = useState<Mode>('preset')
@@ -15,6 +15,12 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   const [hfConfig, setHfConfig] = useState('')
   const [inspect, setInspect] = useState<InspectResult | null>(null)
   const [inspecting, setInspecting] = useState(false)
+
+  // kaggle mode
+  const [kgRef, setKgRef] = useState('')
+  const [kg, setKg] = useState<KaggleInspect | null>(null)
+  const [kgBusy, setKgBusy] = useState(false)
+  const [kgHeader, setKgHeader] = useState(true)
 
   // upload mode
   const [upload, setUpload] = useState<UploadResult | null>(null)
@@ -66,6 +72,21 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
     }
   }
 
+  async function doKaggle(file?: string, header = kgHeader) {
+    setError('')
+    setKgBusy(true)
+    try {
+      const r = await api.inspectKaggle(kgRef, file, header)
+      setKg(r)
+      setTextCol(r.text_column ?? '')
+      setLabelCol(r.label_column ?? '')
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setKgBusy(false)
+    }
+  }
+
   async function doUpload(file: File) {
     setError('')
     setUpload(null)
@@ -85,6 +106,10 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
       if (!inspect || inspect.needs_config) return null
       return { kind: 'hf', path: inspect.path, config: inspect.config ?? null, text_column: textCol, label_column: labelCol }
     }
+    if (mode === 'kaggle') {
+      if (!kg) return null
+      return { kind: 'kaggle', path: kg.path, file: kg.file, header: kg.header, text_column: textCol, label_column: labelCol }
+    }
     if (!upload) return null
     return { kind: 'upload', upload_id: upload.upload_id, text_column: textCol, label_column: labelCol }
   }
@@ -92,7 +117,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   async function run() {
     const source = buildSource()
     if (!source) {
-      setError(mode === 'hf' ? 'Load a dataset link first.' : 'Upload a file first.')
+      setError(mode === 'hf' || mode === 'kaggle' ? 'Load a dataset link first.' : 'Upload a file first.')
       return
     }
     setError('')
@@ -129,8 +154,8 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   }
 
   const current = datasets.find((d) => d.id === datasetId)
-  const columns = mode === 'hf' ? inspect?.columns : mode === 'upload' ? upload?.columns : undefined
-  const labelCount = mode === 'hf' ? inspect?.labels?.length : mode === 'upload' ? upload?.labels.length : undefined
+  const columns = mode === 'hf' ? inspect?.columns : mode === 'upload' ? upload?.columns : mode === 'kaggle' ? kg?.columns : undefined
+  const labelCount = mode === 'hf' ? inspect?.labels?.length : mode === 'upload' ? upload?.labels.length : mode === 'kaggle' ? kg?.labels.length : undefined
 
   return (
     <div>
@@ -139,6 +164,9 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
         <div className="tabs" style={{ marginBottom: 12 }}>
           <button className={mode === 'preset' ? 'active' : ''} onClick={() => setMode('preset')}>
             Preset
+          </button>
+          <button className={mode === 'kaggle' ? 'active' : ''} onClick={() => setMode('kaggle')}>
+            Kaggle link
           </button>
           <button className={mode === 'hf' ? 'active' : ''} onClick={() => setMode('hf')}>
             Hugging Face link
@@ -196,6 +224,45 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
           </>
         )}
 
+        {mode === 'kaggle' && (
+          <>
+            <div className="row" style={{ marginTop: 0 }}>
+              <input placeholder="https://www.kaggle.com/datasets/owner/name  or  owner/name" value={kgRef} onChange={(e) => setKgRef(e.target.value)} style={{ flex: 1, minWidth: 260 }} />
+              <button className="primary" disabled={kgBusy || !kgRef.trim()} onClick={() => doKaggle()}>
+                {kgBusy ? 'Downloading…' : 'Load'}
+              </button>
+            </div>
+            <div className="small" style={{ marginTop: 6 }}>Public datasets download without an account. For private or competition data add Kaggle credentials in Settings.</div>
+            {kg && (
+              <div className="row">
+                <label>file</label>
+                <select value={kg.file} onChange={(e) => doKaggle(e.target.value)} style={{ maxWidth: 360 }}>
+                  {kg.files.map((f) => (
+                    <option key={f.file} value={f.file}>
+                      {f.file} ({f.size_kb} KB)
+                    </option>
+                  ))}
+                </select>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={kgHeader}
+                    onChange={(e) => {
+                      setKgHeader(e.target.checked)
+                      doKaggle(kg.file, e.target.checked)
+                    }}
+                    style={{ width: 'auto', marginRight: 6 }}
+                  />
+                  first row is header
+                </label>
+                <span className="small">
+                  {kg.size} rows · {kg.labels.length} labels
+                </span>
+              </div>
+            )}
+          </>
+        )}
+
         {mode === 'upload' && (
           <>
             <input
@@ -235,7 +302,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
         )}
 
         <div className="row">
-          {mode !== 'upload' && (
+          {mode !== 'upload' && mode !== 'kaggle' && (
             <>
               <label>split</label>
               <input value={split} onChange={(e) => setSplit(e.target.value)} style={{ width: 110 }} />

@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     hf_token: str = ""
     typesafe_api_key: str = ""
+    kaggle_username: str = ""
+    kaggle_key: str = ""
 
 
 settings = Settings()

@@ -188,3 +188,98 @@ def load_upload(upload_id: str) -> Dataset:
     if not f.exists():
         raise FileNotFoundError("upload not found")
     return Dataset.from_list([json.loads(l) for l in f.read_text().splitlines() if l.strip()])
+
+
+# ------------------------------------------------------------------ Kaggle
+KAGGLE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
+KAGGLE_DIR = Path(__file__).resolve().parent.parent / "data" / "kaggle"
+TABULAR = (".csv", ".tsv", ".json", ".jsonl", ".parquet", ".xlsx")
+
+
+def parse_kaggle_ref(ref: str) -> str:
+    """Accept 'owner/dataset' or a kaggle.com/datasets/owner/dataset URL."""
+    ref = ref.strip()
+    m = re.match(r"^https?://(?:www\.)?kaggle\.com/datasets/([^/\s?#]+/[^/\s?#]+)(?:/.*)?$", ref)
+    if m:
+        ref = m.group(1)
+    if not KAGGLE_RE.match(ref):
+        raise ValueError("expected a Kaggle dataset like 'owner/dataset' or a kaggle.com/datasets URL")
+    return ref
+
+
+def _kaggle_env() -> None:
+    """Export Kaggle credentials (Settings > .env) for kagglehub; public datasets work without them."""
+    import os
+
+    from . import secrets_store
+
+    user = secrets_store.get_secret("kaggle_username") or settings.kaggle_username
+    key = secrets_store.get_secret("kaggle_key") or settings.kaggle_key
+    if user and key:
+        os.environ["KAGGLE_USERNAME"] = user
+        os.environ["KAGGLE_KEY"] = key
+    os.environ.setdefault("KAGGLEHUB_CACHE", str(KAGGLE_DIR))
+
+
+def _kaggle_files(root: Path) -> list[dict[str, Any]]:
+    out = []
+    for f in sorted(root.rglob("*")):
+        if f.is_file() and f.suffix.lower() in TABULAR:
+            out.append({"file": str(f.relative_to(root)), "size_kb": round(f.stat().st_size / 1024, 1)})
+    return out
+
+
+def _read_table(path: Path, max_rows: int | None = None, header: bool = True):
+    import pandas as pd
+
+    ext = path.suffix.lower()
+    hdr = 0 if header else None
+    if ext == ".csv":
+        return pd.read_csv(path, nrows=max_rows, low_memory=False, header=hdr)
+    if ext == ".tsv":
+        return pd.read_csv(path, sep="\t", nrows=max_rows, header=hdr)
+    if ext == ".jsonl":
+        return pd.read_json(path, lines=True, nrows=max_rows)
+    if ext == ".json":
+        return pd.read_json(path)
+    if ext == ".parquet":
+        return pd.read_parquet(path)
+    if ext == ".xlsx":
+        return pd.read_excel(path, nrows=max_rows, header=hdr)
+    raise ValueError(f"unsupported file type {ext}")
+
+
+def _inspect_kaggle_sync(ref: str, file: str | None, header: bool = True) -> dict[str, Any]:
+    import kagglehub
+
+    _kaggle_env()
+    root = Path(kagglehub.dataset_download(ref))
+    files = _kaggle_files(root)
+    if not files:
+        raise ValueError("no CSV/JSON/Parquet files in this dataset")
+    chosen = file or files[0]["file"]
+    if chosen not in {f["file"] for f in files}:
+        raise ValueError(f"file '{chosen}' not in dataset")
+    df = _read_table(root / chosen, max_rows=50000, header=header)
+    df.columns = [str(c) if header else f"col_{c}" for c in df.columns]
+    text, label = guess_columns(list(df.columns))
+    labels = sorted(df[label].dropna().astype(str).unique().tolist())[:200] if label else []
+    return {"path": ref, "files": files, "file": chosen, "header": header, "columns": list(df.columns), "text_column": text, "label_column": label,
+            "size": int(len(df)), "labels": labels, "preview": df.head(3).astype(object).where(df.head(3).notna(), None).to_dict("records")}
+
+
+async def inspect_kaggle(ref: str, file: str | None = None, header: bool = True) -> dict[str, Any]:
+    return await asyncio.to_thread(_inspect_kaggle_sync, parse_kaggle_ref(ref), file, header)
+
+
+def load_kaggle(ref: str, file: str, header: bool = True) -> Dataset:
+    import kagglehub
+
+    _kaggle_env()
+    root = Path(kagglehub.dataset_download(parse_kaggle_ref(ref)))
+    p = (root / file).resolve()
+    if not str(p).startswith(str(root.resolve())) or not p.is_file():
+        raise ValueError("bad file")
+    df = _read_table(p, header=header)
+    df.columns = [str(c) if header else f"col_{c}" for c in df.columns]
+    return Dataset.from_pandas(df.astype({c: str for c in df.columns if df[c].dtype == object}), preserve_index=False)

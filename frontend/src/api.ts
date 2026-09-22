@@ -1,4 +1,4 @@
-import type { ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, ORModel, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
+import type { ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, ORModel, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`/api${path}`, {
@@ -22,8 +22,12 @@ export const api = {
   predict: (state: State, questions: Questions, engine?: Engine | null) =>
     req<PredictResult>('/predict', { method: 'POST', body: JSON.stringify({ state, questions, engine: engine ?? undefined }) }),
   orModels: () => req<ORModel[]>('/openrouter/models'),
-  chat: (messages: { role: 'user' | 'assistant'; content: string }[], engine?: Engine | null) =>
-    req<ChatTurn>('/chat', { method: 'POST', body: JSON.stringify({ messages, engine: engine ?? undefined }) }),
+  chat: (message: string, session_id: string | null, engine?: Engine | null) =>
+    req<ChatTurn & { session_id: string; title: string; message: ChatMsg }>('/chat', { method: 'POST', body: JSON.stringify({ message, session_id, engine: engine ?? undefined }) }),
+  sessions: () => req<ChatSessionSummary[]>('/chat/sessions'),
+  session: (id: string) => req<ChatSession>(`/chat/sessions/${id}`),
+  deleteSession: (id: string) => req<{ ok: boolean }>(`/chat/sessions/${id}`, { method: 'DELETE' }),
+  deleteAllSessions: () => req<{ ok: boolean; deleted: number }>('/chat/sessions', { method: 'DELETE' }),
   usage: (days?: number) => req<UsageSummary>(`/usage?limit=300${days ? `&days=${days}` : ''}`),
   clearUsage: () => req<{ ok: boolean }>('/usage', { method: 'DELETE' }),
   skill: () => req<{ sources: string[]; guide: string }>('/skill'),
@@ -60,6 +64,7 @@ export const api = {
     use_ai_criteria: boolean
     shortlist_k?: number | null
   }) => req<EvalResult>('/datasets/evaluate', { method: 'POST', body: JSON.stringify(body) }),
+  inspectKaggle: (ref: string, file?: string, header = true) => req<KaggleInspect>('/datasets/kaggle/inspect', { method: 'POST', body: JSON.stringify({ ref, file, header }) }),
   inspect: (ref: string) => req<InspectResult>('/datasets/inspect', { method: 'POST', body: JSON.stringify({ ref }) }),
   upload: async (file: File) => {
     const fd = new FormData()
@@ -78,6 +83,7 @@ export interface SettingsInfo {
   decision_engine: Engine
   typesafe_key_set: boolean
   typesafe_key_masked: string | null
+  kaggle_username: string | null
 }
 
 export const settingsApi = {
@@ -92,4 +98,6 @@ export const settingsApi = {
     req<{ ok: boolean; openrouter_model: string; decision_engine: Engine }>('/settings/prefs', { method: 'PUT', body: JSON.stringify(body) }),
   setTypesafeKey: (api_key: string) => req<{ ok: boolean; masked: string }>('/settings/typesafe', { method: 'PUT', body: JSON.stringify({ api_key }) }),
   clearTypesafeKey: () => req<{ ok: boolean }>('/settings/typesafe', { method: 'DELETE' }),
+  setKaggle: (username: string, key: string) => req<{ ok: boolean; username: string }>('/settings/kaggle', { method: 'PUT', body: JSON.stringify({ username, key }) }),
+  clearKaggle: () => req<{ ok: boolean }>('/settings/kaggle', { method: 'DELETE' }),
 }

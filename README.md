@@ -10,10 +10,14 @@ Frontend (Vite + React + TypeScript) and backend (FastAPI) around the
 - **TypeSafe / Jev agent skill** – `backend/skills/` holds the skill (`SKILL.md`) and primitive docs
   fetched from docs.typesafe.ai. Laya and Jev share the same question schema, so the distilled
   question-writing guidance is injected into the text model's prompt. `GET /api/skill` shows it.
+- **Chat sessions** – every chat is saved on the backend (`backend/data/chats/`), listed in a sidebar,
+  reopenable, and deletable one by one or all at once.
 - **Usage tab** – every model call (chat, prepare, criteria, decide, explain) is logged with tokens,
   latency and estimated OpenRouter cost, with breakdowns by model, purpose and day.
 - **Dataset eval** – run Laya as a zero-shot classifier and see accuracy, from three sources:
   - presets (Banking77, DAIR Emotion, AG News, TweetEval sentiment, SST-2, CLINC150),
+  - any Kaggle dataset link or `owner/name` (public ones need no account; add credentials in Settings
+    for private ones), with file picker and header toggle,
   - any Hugging Face dataset link or id (`https://huggingface.co/datasets/owner/name`, `owner/name`, `owner/name:config`),
     downloaded on demand with text/label columns auto-guessed and editable,
   - your own JSON / JSONL / CSV file (list of `{text, label}` records or a HF rows export).

@@ -8,6 +8,8 @@ export default function Settings({ onChange }: { onChange: () => void }) {
   const [info, setInfo] = useState<SettingsInfo | null>(null)
   const [key, setKey] = useState('')
   const [tsKey, setTsKey] = useState('')
+  const [kgUser, setKgUser] = useState('')
+  const [kgKey, setKgKey] = useState('')
   const [show, setShow] = useState(false)
   const [prepModel, setPrepModel] = useState('')
   const [engine, setEngine] = useState<Engine>({ kind: 'laya' })
@@ -51,6 +53,11 @@ export default function Settings({ onChange }: { onChange: () => void }) {
     const r = await settingsApi.setTypesafeKey(tsKey.trim())
     setTsKey('')
     return `TypeSafe key ${r.masked} verified with a Jev call and saved encrypted.`
+  })
+  const saveKaggle = wrap('kg', async () => {
+    const r = await settingsApi.setKaggle(kgUser.trim(), kgKey.trim())
+    setKgKey('')
+    return `Kaggle credentials for ${r.username} saved encrypted.`
   })
   const savePrefs = wrap('prefs', async () => {
     await settingsApi.setPrefs({ openrouter_model: prepModel, decision_engine: engine })
@@ -108,6 +115,35 @@ export default function Settings({ onChange }: { onChange: () => void }) {
               </button>
               {info?.typesafe_key_set && (
                 <button className="ghost" type="button" onClick={wrap('clearts', async () => (await settingsApi.clearTypesafeKey(), 'TypeSafe key removed.'))}>
+                  Remove
+                </button>
+              )}
+            </div>
+          </form>
+        </section>
+
+        <section className="panel" style={{ marginTop: 16 }}>
+          <h2>Kaggle credentials (optional)</h2>
+          <div className="small" style={{ marginBottom: 10 }}>
+            {info?.kaggle_username ? `Active: ${info.kaggle_username}` : 'Only needed for private or competition datasets. kaggle.com → Settings → API → Create new token.'}
+          </div>
+          <form
+            autoComplete="off"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (kgUser.trim() && kgKey.trim()) saveKaggle()
+            }}
+          >
+            <div className="row" style={{ marginTop: 0 }}>
+              <input placeholder="username" value={kgUser} onChange={(e) => setKgUser(e.target.value)} style={{ maxWidth: 200 }} />
+              <input type={show ? 'text' : 'password'} autoComplete="off" placeholder="API key" value={kgKey} onChange={(e) => setKgKey(e.target.value)} style={{ flex: 1 }} />
+            </div>
+            <div className="row">
+              <button className="primary" type="submit" disabled={!!busy || !kgUser.trim() || kgKey.trim().length < 10}>
+                {busy === 'kg' ? 'Saving…' : 'Save'}
+              </button>
+              {info?.kaggle_username && (
+                <button className="ghost" type="button" onClick={wrap('clearkg', async () => (await settingsApi.clearKaggle(), 'Kaggle credentials removed.'))}>
                   Remove
                 </button>
               )}

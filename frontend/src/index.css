@@ -79,3 +79,13 @@ pre { font-size: 12px; overflow: auto; background: #0d0f14; padding: 10px; borde
 table.aligned { table-layout: fixed; }
 table.aligned th:first-child, table.aligned td:first-child { width: 30%; }
 table.aligned th:not(:first-child), table.aligned td:not(:first-child) { text-align: right; }
+
+.chatwrap { display: grid; grid-template-columns: 220px 1fr; gap: 14px; }
+@media (max-width: 800px) { .chatwrap { grid-template-columns: 1fr; } }
+.sessions { display: flex; flex-direction: column; gap: 4px; max-height: 70vh; overflow: auto; }
+.session { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; cursor: pointer; font-size: 12.5px; }
+.session.on { border-color: var(--accent); background: rgba(108,140,255,.12); }
+.session span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session small { color: var(--muted); }
+.session button { background: transparent; border: 0; color: var(--muted); cursor: pointer; padding: 0 2px; font-size: 14px; }
+.session button:hover { color: var(--bad); }

@@ -55,11 +55,13 @@ export interface EvalResult {
 }
 
 export interface DatasetSource {
-  kind: 'preset' | 'hf' | 'upload'
+  kind: 'preset' | 'hf' | 'upload' | 'kaggle'
   dataset_id?: string
   path?: string
   config?: string | null
   upload_id?: string
+  file?: string
+  header?: boolean
   text_column?: string | null
   label_column?: string | null
 }
@@ -148,4 +150,38 @@ export interface ChatTurn {
   spec: { state: State; questions: Questions } | null
   result: PredictResult | null
   explanation: string | null
+}
+
+export interface ChatMsg {
+  role: 'user' | 'assistant'
+  content: string
+  ts?: number
+  spec?: { state: State; questions: Questions } | null
+  result?: PredictResult | null
+}
+
+export interface ChatSessionSummary {
+  id: string
+  title: string
+  created: number
+  updated: number
+  count: number
+  engine?: Engine | null
+}
+
+export interface ChatSession extends ChatSessionSummary {
+  messages: ChatMsg[]
+}
+
+export interface KaggleInspect {
+  path: string
+  files: { file: string; size_kb: number }[]
+  file: string
+  header: boolean
+  columns: string[]
+  text_column: string | null
+  label_column: string | null
+  size: number
+  labels: string[]
+  preview: Record<string, unknown>[]
 }

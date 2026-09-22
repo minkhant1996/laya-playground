@@ -7,3 +7,4 @@ python-dotenv
 pydantic-settings
 cryptography
 python-multipart
+kagglehub

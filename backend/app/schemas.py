@@ -45,11 +45,13 @@ class DatasetInfo(BaseModel):
 
 class DatasetSource(BaseModel):
     """Where the evaluation rows come from."""
-    kind: Literal["preset", "hf", "upload"] = "preset"
+    kind: Literal["preset", "hf", "upload", "kaggle"] = "preset"
     dataset_id: str | None = None      # preset
     path: str | None = None            # hf repo id or URL
     config: str | None = None          # hf config name
     upload_id: str | None = None       # upload
+    file: str | None = None            # kaggle: file inside the dataset
+    header: bool = True                # kaggle: first row is a header
     text_column: str | None = None     # hf / upload override
     label_column: str | None = None
 
