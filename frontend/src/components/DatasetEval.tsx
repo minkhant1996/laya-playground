@@ -1146,6 +1146,7 @@ export default function DatasetEval({
                             </b>
                             {live.concurrency && live.concurrency > 1 ? ` · ${live.concurrency} in parallel` : ""}
                           </span>
+                        )}
                         {live.mem && (
                           <span title="Backend process memory while Laya runs (— for Jev, which runs in the cloud)">
                             RAM <b>{(live.mem.ram_mb / 1024).toFixed(2)} GB</b>
@@ -1157,7 +1158,6 @@ export default function DatasetEval({
                           <span>
                             RAM <b>—</b> · VRAM <b>—</b> <span className="small">(cloud)</span>
                           </span>
-                        )}
                         )}
                       </>
                     )}
