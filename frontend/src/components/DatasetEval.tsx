@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import EnginePicker from './EnginePicker'
+import EvalTable from './EvalTable'
 import { api } from '../api'
 import type { DatasetInfo, DatasetSource, Engine, EvalResult, EvalRow, InspectResult, KaggleInspect, UploadResult } from '../types'
 
@@ -360,20 +361,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
             <div className="progress">
               <div style={{ width: live ? `${(live.i / live.n) * 100}%` : '0%' }} />
             </div>
-            {busy && liveRows.length > 0 && (
-              <table>
-                <tbody>
-                  {liveRows.map((r, i) => (
-                    <tr key={i}>
-                      <td className="small">{r.text.length > 90 ? r.text.slice(0, 88) + '…' : r.text}</td>
-                      <td>{r.gold}</td>
-                      <td className={r.correct ? 'ok' : 'bad'}>{r.pred}</td>
-                      <td>{r.confidence != null ? `${(r.confidence * 100).toFixed(0)}%` : ''}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            {busy && liveRows.length > 0 && <EvalTable rows={liveRows} compact />}
           </div>
         )}
         {error && <div className="error">{error}</div>}
@@ -402,26 +390,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
               <div className="v" style={{ fontSize: 15 }}>{result.routing?.model ?? '—'}</div>
             </div>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>text</th>
-                <th>gold</th>
-                <th>pred</th>
-                <th>conf</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.rows.map((r, i) => (
-                <tr key={i}>
-                  <td>{r.text}</td>
-                  <td>{r.gold}</td>
-                  <td className={r.correct ? 'ok' : 'bad'}>{r.pred}</td>
-                  <td>{r.confidence != null ? `${(r.confidence * 100).toFixed(0)}%` : ''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <EvalTable rows={result.rows} />
           <details>
             <summary>Criteria used for each label</summary>
             <pre>{JSON.stringify(result.criteria, null, 2)}</pre>

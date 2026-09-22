@@ -89,3 +89,7 @@ table.aligned th:not(:first-child), table.aligned td:not(:first-child) { text-al
 .session small { color: var(--muted); }
 .session button { background: transparent; border: 0; color: var(--muted); cursor: pointer; padding: 0 2px; font-size: 14px; }
 .session button:hover { color: var(--bad); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.badge.ok { color: var(--ok); background: rgba(60,207,122,.14); border: 1px solid rgba(60,207,122,.4); }
+.badge.bad { color: var(--bad); background: rgba(255,107,107,.14); border: 1px solid rgba(255,107,107,.4); }
+.evaltable th:nth-child(2), .evaltable th:nth-child(3) { width: 16%; }
