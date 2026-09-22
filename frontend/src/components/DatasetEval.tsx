@@ -727,8 +727,17 @@ export default function DatasetEval({
                     </small>
                     <button
                       title="Forget this dataset"
-                      onClick={(ev) => {
+                      onClick={async (ev) => {
                         ev.stopPropagation();
+                        if (
+                          !(await confirm({
+                            title: "Forget this dataset?",
+                            message:
+                              "Only the shortcut and its saved plan are removed; downloaded data stays cached.",
+                            confirmLabel: "Forget",
+                          }))
+                        )
+                          return;
                         api.deleteLibrary(e.id).then(() => {
                           if (saved?.id === e.id) setSaved(null);
                           loadLib();
