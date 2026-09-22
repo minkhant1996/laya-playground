@@ -114,3 +114,11 @@ table.aligned th:not(:first-child), table.aligned td:not(:first-child) { text-al
 .score .ticks { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: var(--muted); }
 .score .ticks span { flex: 1; text-align: center; }
 .score .ticks span:first-child { text-align: left; } .score .ticks span:last-child { text-align: right; }
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.modal { width: 95%; max-height: 90vh; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+@media (min-width: 768px) { .modal { width: 70%; } }
+.modal header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); margin: 0; }
+.modal header b { font-size: 15px; }
+.modal .body { overflow: auto; padding: 16px 18px; font-size: 14px; line-height: 1.5; }
+.modal .body pre { white-space: pre-wrap; }
+.modal .body table { margin: 8px 0; }

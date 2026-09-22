@@ -30,6 +30,12 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
     api.learnDocs().then(setDocs).catch(() => setDocs([]))
   }, [])
   useEffect(() => {
+    if (!viewing) return
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && setViewing(null)
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [viewing])
+  useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' })
   }, [msgs, busy])
 
@@ -156,15 +162,22 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
         </section>
 
         {viewing && (
-          <section className="panel" style={{ marginTop: 16 }}>
-            <h2 style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>{docs.find((d) => d.file === viewing.file)?.title ?? viewing.file}</span>
-              <button className="chip" onClick={() => setViewing(null)}>
-                close
-              </button>
-            </h2>
-            <div className="msg assistant" style={{ maxWidth: '100%', maxHeight: '60vh', overflow: 'auto' }} dangerouslySetInnerHTML={md(viewing.content)} />
-          </section>
+          <div className="modal-bg" onClick={() => setViewing(null)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <header>
+                <b>{docs.find((d) => d.file === viewing.file)?.title ?? viewing.file}</b>
+                <span className="row" style={{ marginTop: 0 }}>
+                  <a href={docs.find((d) => d.file === viewing.file)?.url} target="_blank" rel="noreferrer" className="chip" style={{ textDecoration: 'none' }}>
+                    open source ↗
+                  </a>
+                  <button className="chip" onClick={() => setViewing(null)}>
+                    ✕ close
+                  </button>
+                </span>
+              </header>
+              <div className="body" dangerouslySetInnerHTML={md(viewing.content)} />
+            </div>
+          </div>
         )}
       </div>
     </div>
