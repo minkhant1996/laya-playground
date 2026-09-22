@@ -124,7 +124,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
     setError('')
     setBusy(true)
     setResult(null)
-    setLive(null)
+    setLive({ i: 0, n: limit, accuracy: 0, elapsed: 0, eta: 0 })
     setLiveRows([])
     setStatus('starting')
     const ac = new AbortController()
@@ -134,7 +134,10 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
         { source, split, limit, offset, use_ai_criteria: useAi && aiEnabled, shortlist_k: shortlist > 1 ? shortlist : null, engine },
         (ev) => {
           if (ev.type === 'status') setStatus(ev.message)
-          else if (ev.type === 'start') setStatus(`running ${ev.n} samples on ${ev.engine.kind === 'laya' ? 'Laya (local)' : ev.engine.model}`)
+          else if (ev.type === 'start') {
+            setStatus(`running ${ev.n} samples on ${ev.engine.kind === 'laya' ? 'Laya (local)' : ev.engine.model}`)
+            setLive({ i: 0, n: ev.n, accuracy: 0, elapsed: 0, eta: 0 })
+          }
           else if (ev.type === 'row') {
             setLive({ i: ev.i, n: ev.n, accuracy: ev.accuracy, elapsed: ev.elapsed, eta: ev.eta })
             setLiveRows((r) => [ev.row, ...r].slice(0, 12))
@@ -350,15 +353,19 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
                   <span>
                     sample <b>{live.i}</b> / {live.n}
                   </span>
-                  <span>
-                    running accuracy <b>{(live.accuracy * 100).toFixed(1)}%</b>
-                  </span>
-                  <span>
-                    elapsed <b>{live.elapsed}s</b>
-                  </span>
-                  <span>
-                    ETA <b>{live.eta}s</b>
-                  </span>
+                  {live.i > 0 && (
+                    <>
+                      <span>
+                        running accuracy <b>{(live.accuracy * 100).toFixed(1)}%</b>
+                      </span>
+                      <span>
+                        elapsed <b>{live.elapsed}s</b>
+                      </span>
+                      <span>
+                        ETA <b>{live.eta}s</b>
+                      </span>
+                    </>
+                  )}
                 </>
               )}
             </div>
