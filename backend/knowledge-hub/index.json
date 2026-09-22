@@ -1,0 +1,142 @@
+[
+ {
+  "file": "typesafe-blog-introducing-system-one-and-jev.md",
+  "title": "Introducing System One Models & Jev",
+  "url": "https://typesafe.ai/blog/introducing-system-one-models-and-jev",
+  "summary": "Introducing System One Models & Jev - TypeSafe AI Blog",
+  "chars": 13715
+ },
+ {
+  "file": "introduction.md",
+  "title": "Introduction",
+  "url": "https://docs.typesafe.ai/introduction",
+  "summary": "Large language models (LLMs) are designed to produce text for humans to read. When you need a model to make a judgment that your code will consume, that creates a mismatch: you are coercing a text-generation system into outputting structure",
+  "chars": 4305
+ },
+ {
+  "file": "introduction-coding-agents.md",
+  "title": "Jev with coding agents",
+  "url": "https://docs.typesafe.ai/introduction/coding-agents",
+  "summary": "If you found TypeSafe while looking for a model to plug into your coding agent, start here. Jev is **not** a drop-in replacement for the LLM behind Claude Code, Cursor, opencode, Copilot, Muse Spark, Grok Bot, or similar tools. Instead, you",
+  "chars": 5138
+ },
+ {
+  "file": "introduction-machine-learning-primer.md",
+  "title": "AI primer",
+  "url": "https://docs.typesafe.ai/introduction/machine-learning-primer",
+  "summary": "Most AI products are built around a conversation between a model and a person. TypeSafe starts from a different bet: large-scale automation will be dominated by AI-to-AI and AI-to-software interactions, so the machine interface matters more",
+  "chars": 6578
+ },
+ {
+  "file": "concepts-system-one.md",
+  "title": "System One",
+  "url": "https://docs.typesafe.ai/concepts/system-one",
+  "summary": "System One models are a class of AI models built to make fast, structured decisions that software can use directly. A System One model evaluates a [state](/concepts/state) and returns typed answers and probabilities.",
+  "chars": 4061
+ },
+ {
+  "file": "concepts-state.md",
+  "title": "State",
+  "url": "https://docs.typesafe.ai/concepts/state",
+  "summary": "**State** is the content you ask a System One model to evaluate. It could be a support message, a passage of text, or the current state of your application. You pass it in the `state` field of an API request, alongside the questions you wan",
+  "chars": 3872
+ },
+ {
+  "file": "concepts-how-to-build-with-system-one.md",
+  "title": "How to build with TypeSafe",
+  "url": "https://docs.typesafe.ai/concepts/how-to-build-with-system-one",
+  "summary": "export function TypesafeExample({example, display, title}) { const keyStrUriSafe = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$\"; function compressToEncodedURIComponent(input) { if (input == null) return \"\"; return _co",
+  "chars": 40918
+ },
+ {
+  "file": "concepts-use-case-map.md",
+  "title": "Example use cases",
+  "url": "https://docs.typesafe.ai/concepts/use-case-map",
+  "summary": "Use this map to brainstorm where TypeSafe could fit in your industry. Open the closest industry, scan the example decisions, and adapt them to the documents and actions in your own workflow.",
+  "chars": 11707
+ },
+ {
+  "file": "primitives.md",
+  "title": "Primitives (Questions)",
+  "url": "https://docs.typesafe.ai/primitives",
+  "summary": "export function TypesafeExample({example, display, title}) { const keyStrUriSafe = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$\"; function compressToEncodedURIComponent(input) { if (input == null) return \"\"; return _co",
+  "chars": 24808
+ },
+ {
+  "file": "primitives-advanced.md",
+  "title": "Advanced: structure",
+  "url": "https://docs.typesafe.ai/primitives/advanced",
+  "summary": "export function TypesafeExample({example, display, title}) { const keyStrUriSafe = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$\"; function compressToEncodedURIComponent(input) { if (input == null) return \"\"; return _co",
+  "chars": 19058
+ },
+ {
+  "file": "primitives-noul.md",
+  "title": "Noul",
+  "url": "https://docs.typesafe.ai/primitives/noul",
+  "summary": "export function TypesafeExample({example, display, title}) { const keyStrUriSafe = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$\"; function compressToEncodedURIComponent(input) { if (input == null) return \"\"; return _co",
+  "chars": 27361
+ },
+ {
+  "file": "primitives-score.md",
+  "title": "Score",
+  "url": "https://docs.typesafe.ai/primitives/score",
+  "summary": "export function ScoreExplorer() { const examples = [{ \"id\": \"severity\", \"label\": \"Bug severity\", \"question\": \"How severe is the reported issue?\", \"state\": \"The export button crashes the settings page in Safari. It works in Chrome, but a few",
+  "chars": 43976
+ },
+ {
+  "file": "primitives-choice.md",
+  "title": "Choice",
+  "url": "https://docs.typesafe.ai/primitives/choice",
+  "summary": "export function TypesafeExample({example, display, title}) { const keyStrUriSafe = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$\"; function compressToEncodedURIComponent(input) { if (input == null) return \"\"; return _co",
+  "chars": 26786
+ },
+ {
+  "file": "confidence.md",
+  "title": "Confidence",
+  "url": "https://docs.typesafe.ai/confidence",
+  "summary": "export function ConfidenceExplorer() { const [probabilities, setProbabilities] = useState([90, 6, 4]); const options = [\"A\", \"B\", \"C\"]; function changeProbability(index, value) { setProbabilities(current => { const others = [0, 1, 2].filter",
+  "chars": 11391
+ },
+ {
+  "file": "patterns.md",
+  "title": "Patterns",
+  "url": "https://docs.typesafe.ai/patterns",
+  "summary": "TypeSafe is designed to sit within a larger system, powering decisions with AI. Learning to think in terms of discrete, atomic decisions that compose into complex system behavior is a key skill for getting the most out of TypeSafe.",
+  "chars": 2020
+ },
+ {
+  "file": "patterns-fan-out.md",
+  "title": "Speculative fan-out",
+  "url": "https://docs.typesafe.ai/patterns/fan-out",
+  "summary": "export function TypesafeExample({example, display, title}) { const keyStrUriSafe = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$\"; function compressToEncodedURIComponent(input) { if (input == null) return \"\"; return _co",
+  "chars": 13965
+ },
+ {
+  "file": "patterns-confidence-routing.md",
+  "title": "Confidence-gated routing",
+  "url": "https://docs.typesafe.ai/patterns/confidence-routing",
+  "summary": "export function TypesafeExample({example, display, title}) { const keyStrUriSafe = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$\"; function compressToEncodedURIComponent(input) { if (input == null) return \"\"; return _co",
+  "chars": 12166
+ },
+ {
+  "file": "patterns-composite-scoring.md",
+  "title": "Composite scoring",
+  "url": "https://docs.typesafe.ai/patterns/composite-scoring",
+  "summary": "export function TypesafeExample({example, display, title}) { const keyStrUriSafe = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$\"; function compressToEncodedURIComponent(input) { if (input == null) return \"\"; return _co",
+  "chars": 13539
+ },
+ {
+  "file": "patterns-intent-routing.md",
+  "title": "Intent routing",
+  "url": "https://docs.typesafe.ai/patterns/intent-routing",
+  "summary": "export function TypesafeExample({example, display, title}) { const keyStrUriSafe = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$\"; function compressToEncodedURIComponent(input) { if (input == null) return \"\"; return _co",
+  "chars": 13440
+ },
+ {
+  "file": "laya-model-card.md",
+  "title": "Laya",
+  "url": "https://huggingface.co/convaiinnovations/laya",
+  "summary": "**Multilingual, non-autoregressive System 1 decision model.** Give it a **state** (text, email, ticket, or JSON) and **typed questions**; it returns typed answers with mathematically calibrated probabilities in a single forward pass (~33 ms",
+  "chars": 14763
+ }
+]

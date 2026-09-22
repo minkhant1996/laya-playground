@@ -213,3 +213,24 @@ export interface PlanResult extends EvalPlan {
   label_values: string[]
   rationale: string
 }
+
+export interface LearnDoc {
+  file: string
+  title: string
+  url: string
+  summary: string
+  chars: number
+}
+
+export interface LearnSource {
+  n: number
+  title: string
+  url: string
+  file: string
+}
+
+export interface LearnMsg {
+  role: 'user' | 'assistant'
+  content: string
+  sources?: LearnSource[]
+}

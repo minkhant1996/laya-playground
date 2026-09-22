@@ -5,8 +5,9 @@ import Playground from './components/Playground'
 import DatasetEval from './components/DatasetEval'
 import Settings from './components/Settings'
 import Usage from './components/Usage'
+import Learn from './components/Learn'
 
-type Tab = 'playground' | 'datasets' | 'settings' | 'usage'
+type Tab = 'playground' | 'datasets' | 'learn' | 'settings' | 'usage'
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('playground')
@@ -37,6 +38,9 @@ export default function App() {
         <button className={tab === 'datasets' ? 'active' : ''} onClick={() => setTab('datasets')}>
           Dataset eval
         </button>
+        <button className={tab === 'learn' ? 'active' : ''} onClick={() => setTab('learn')}>
+          Learn
+        </button>
         <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>
           Settings
         </button>
@@ -46,6 +50,7 @@ export default function App() {
       </nav>
       {tab === 'playground' && <Playground aiEnabled={!!health?.openrouter_configured} defaultEngine={engine} typesafeReady={typesafeReady} />}
       {tab === 'datasets' && <DatasetEval aiEnabled={!!health?.openrouter_configured} defaultEngine={engine} typesafeReady={typesafeReady} />}
+      {tab === 'learn' && <Learn aiEnabled={!!health?.openrouter_configured} textModel={health?.openrouter_model ?? ''} />}
       {tab === 'settings' && <Settings onChange={loadHealth} />}
       {tab === 'usage' && <Usage />}
     </div>

@@ -1,4 +1,4 @@
-import type { ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, LibraryEntry, ORModel, PlanResult, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
+import type { ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, LearnDoc, LearnSource, LibraryEntry, ORModel, PlanResult, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`/api${path}`, {
@@ -91,6 +91,33 @@ export const api = {
   }) => req<EvalResult>('/datasets/evaluate', { method: 'POST', body: JSON.stringify(body) }),
   inspectKaggle: (ref: string, file?: string, header = true) => req<KaggleInspect>('/datasets/kaggle/inspect', { method: 'POST', body: JSON.stringify({ ref, file, header }) }),
   plan: (source: DatasetSource, split: string) => req<PlanResult>('/datasets/plan', { method: 'POST', body: JSON.stringify({ source, split }) }),
+  learnDocs: () => req<LearnDoc[]>('/learn/docs'),
+  learnDoc: (file: string) => req<{ file: string; content: string }>(`/learn/docs/${file}`),
+  learnAsk: async (question: string, history: { role: 'user' | 'assistant'; content: string }[], onStatus: (stage: string, message: string) => void) => {
+    const r = await fetch('/api/learn/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, history }) })
+    if (!r.ok || !r.body) throw new Error((await r.json().catch(() => ({}))).detail ?? r.statusText)
+    const reader = r.body.getReader()
+    const dec = new TextDecoder()
+    let buf = ''
+    let done: { answer: string; sources: LearnSource[] } | null = null
+    for (;;) {
+      const { value, done: end } = await reader.read()
+      if (end) break
+      buf += dec.decode(value, { stream: true })
+      let nl
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim()
+        buf = buf.slice(nl + 1)
+        if (!line) continue
+        const ev = JSON.parse(line)
+        if (ev.type === 'status') onStatus(ev.stage, ev.message)
+        else if (ev.type === 'error') throw new Error(ev.message)
+        else if (ev.type === 'done') done = ev
+      }
+    }
+    if (!done) throw new Error('stream ended without an answer')
+    return done
+  },
   library: () => req<LibraryEntry[]>('/datasets/library'),
   deleteLibrary: (id: string) => req<{ ok: boolean }>(`/datasets/library/${id}`, { method: 'DELETE' }),
   inspect: (ref: string) => req<InspectResult>('/datasets/inspect', { method: 'POST', body: JSON.stringify({ ref }) }),

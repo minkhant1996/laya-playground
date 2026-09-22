@@ -14,6 +14,11 @@ questions and return calibrated answers instead of text.
   question-writing guidance is injected into the text model's prompt. `GET /api/skill` shows it.
 - **Chat sessions** – every chat is saved on the backend (`backend/data/chats/`), listed in a sidebar,
   reopenable, and deletable one by one or all at once.
+- **Learn tab** – ask questions about System One, Jev, Laya, the question types, confidence and the
+  design patterns. The text model works as a small agent over `backend/knowledge-hub/` only: it first
+  picks up to three relevant files from the index, then reads just those and answers with citations.
+  The hub holds Markdown copies of the TypeSafe docs, the launch blog post and the Laya model card,
+  with source links in `index.json` / `README.md`. The agent cannot read anything outside the hub.
 - **Usage tab** – every model call (chat, prepare, criteria, decide, explain) is logged with tokens,
   latency and estimated OpenRouter cost, with breakdowns by model, purpose and day.
 - **Dataset eval** – run Laya as a zero-shot classifier and see accuracy, from three sources:
@@ -90,6 +95,8 @@ First model load downloads ~2 GB of checkpoints. Without a GPU, evaluation is ro
 | POST | `/api/datasets/evaluate/stream` | same body as evaluate; NDJSON events `status/start/row/done/error` |
 | GET | `/api/openrouter/models` | every OpenRouter model with context and prices (cached 10 min) |
 | GET | `/api/usage?days=7` · DELETE | usage totals, breakdowns, recent calls |
+| GET | `/api/learn/docs` · `/api/learn/docs/{file}` | knowledge-hub index and a file's content |
+| POST | `/api/learn/ask` | `{question, history}` → NDJSON `selecting/reading/answering` then `{answer, sources}` |
 | GET | `/api/skill` | sources + distilled guidance from the TypeSafe/Jev skill |
 | PUT | `/api/settings/prefs` | `{openrouter_model?, decision_engine?}` |
 | PUT/DELETE | `/api/settings/typesafe` | TypeSafe (Jev) API key, verified then stored encrypted |

@@ -537,6 +537,47 @@ async def delete_kaggle():
     return {"ok": True}
 
 
+# ---------------------------------------------------------------- Learn (knowledge hub agent)
+class LearnRequest(BaseModel):
+    question: str = PField(min_length=1, max_length=4000)
+    history: list[ChatMessage] = []
+
+
+@app.get("/api/learn/docs")
+async def learn_docs():
+    from . import knowledge
+
+    return knowledge.index()
+
+
+@app.get("/api/learn/docs/{file}")
+async def learn_doc(file: str):
+    from . import knowledge
+
+    try:
+        return {"file": file, "content": knowledge.read(file)}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.post("/api/learn/ask")
+async def learn_ask(req: LearnRequest):
+    """Streams selecting / reading / answering events, then the answer with sources."""
+    from . import knowledge
+
+    if not get_openrouter_key():
+        raise HTTPException(400, "OpenRouter key needed (Settings)")
+
+    async def gen():
+        try:
+            async for ev in knowledge.ask(req.question, [m.model_dump() for m in req.history]):
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+        except Exception as e:
+            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 @app.get("/api/usage")
 async def get_usage(limit: int = 200, days: int | None = None):
     since = time.time() - days * 86400 if days else None
