@@ -130,3 +130,5 @@ table.aligned th:not(:first-child), table.aligned td:not(:first-child) { text-al
 
 .langpick { display: inline-block; }
 .langpick > button { margin: 0; }
+.scroll { overflow: auto; max-height: 360px; }
+.scroll thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }

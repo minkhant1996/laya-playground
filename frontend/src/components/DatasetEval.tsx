@@ -692,7 +692,9 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
               <div className="v" style={{ fontSize: 15 }}>{result.routing?.model ?? '—'}</div>
             </div>
           </div>
-          <EvalTable rows={result.rows} />
+          <div className="scroll" style={{ maxHeight: 520 }}>
+            <EvalTable rows={result.rows} />
+          </div>
           <details>
             <summary>Criteria used for each label</summary>
             <pre>{JSON.stringify(result.criteria, null, 2)}</pre>
