@@ -22,7 +22,20 @@ Frontend (Vite + React + TypeScript) and backend (FastAPI) around the
   Evaluation streams live progress (sample count, running accuracy, ETA, latest rows) and can be stopped.
 - **Settings** – save the OpenRouter key from the UI (see Security below).
 
-## Run
+## Quick setup
+
+```bash
+./setup.sh          # Linux / macOS: venv + pip deps, npm install, creates backend/.env
+./start.sh          # runs backend + frontend, Ctrl+C stops both
+```
+```bat
+setup.bat           :: Windows
+start.bat
+```
+Add `--download-model` to `setup.sh` / `setup.bat` to pre-download the Laya checkpoints (~2.3 GB, three
+checkpoints, cached in `~/.cache/huggingface`). Otherwise they download automatically on the first prediction.
+
+## Run manually
 
 ```bash
 # backend
