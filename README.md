@@ -27,9 +27,10 @@ text. FastAPI + scikit backend, Vite + React + TypeScript frontend, Docker ready
 - **Prepare with AI**: an agent reads the columns and sample rows and proposes the state columns, label
   column, question type (`choice`, `score` or `noul`), instructions, criteria and the label mapping. You
   edit it in a form. Plans are saved per dataset; the presets ship with ready-made plans.
-- Live progress: model-loading status, `i / n` counter, running accuracy, ETA and average per-query time
-  (excluding model load), latest rows, Stop button. Results table with actual / predicted / confidence /
-  time and a green–red correct badge; per-label accuracy; MAE for score questions.
+- Live progress: model-loading status, `i / n` counter, running accuracy, ETA, average request latency and
+  effective time per sample (Jev requests run 6 in parallel), live RAM / VRAM while Laya runs, latest rows,
+  Stop button. Results table with actual / predicted / confidence / time and a green–red correct badge;
+  per-label accuracy; MAE for score questions; peak RAM / VRAM of the run.
 - **Compare Laya vs Jev** on the same samples: accuracy, speed, agreement, both-right / only-one-right,
   per-row and per-label tables.
 - Every run and comparison is kept in a **History** column (left, minimizable) and can be reopened or deleted.
@@ -50,12 +51,23 @@ text. FastAPI + scikit backend, Vite + React + TypeScript frontend, Docker ready
 - The TypeSafe / Jev **agent skill** (`backend/skills/`) is baked into the prompts; the distilled guidance is shown here.
 
 **Usage** – every model call logged with tokens, latency and estimated OpenRouter cost; breakdowns by
-model, purpose and day; live **RAM / VRAM / CPU** meters (NVIDIA, Apple Metal, or CPU-only). Laya runs
-fine on CPU (~80 ms per query on a desktop CPU once loaded); a GPU is optional.
+model, purpose and day; live **RAM / VRAM / CPU** meters (NVIDIA, Apple Metal, or CPU-only).
+
+## Hardware & memory safety
+
+- Laya runs fine on **CPU** (~80 ms per query on a desktop CPU once loaded); a GPU is optional. NVIDIA
+  (CUDA), Apple Silicon (Metal) and CPU-only machines are all supported; the Usage tab says which is in use.
+- Checkpoints load **lazily, one at a time**: English ≈ 1.7 GB, multilingual ≈ 1.3 GB (only if a non-Latin
+  request arrives). The backend sits at ~2.5 GB RAM after the first English request.
+- **Guards**: Laya refuses to load when less than ~2.6 GB of RAM is free (clear error, suggests Jev); a running
+  evaluation stops itself if free RAM drops below ~400 MB; the Usage tab warns when memory is short. Running
+  out of RAM cannot damage hardware, but these guards keep the machine from swapping or the process being killed.
+- Jev runs in TypeSafe's cloud via OpenRouter and needs no local memory, so it is the fallback for small machines.
 
 ## Requirements
 
-- Python 3.10+, Node 18+ (or just Docker). ~2.5 GB free RAM for Laya, ~2.3 GB disk for its checkpoints.
+- Python 3.10+, Node 18+ (or just Docker). ~3 GB free RAM for Laya (see *Hardware & memory safety*), ~2.3 GB
+  disk for its checkpoints. No GPU required.
 - An OpenRouter API key for anything involving a text model (chat, Prepare with AI, Learn, Jev).
   Manual JSON and dataset eval with Laya work without one.
 
