@@ -47,9 +47,10 @@ def _preset_defaults() -> list[dict[str, Any]]:
 def get(src: dict[str, Any]) -> dict[str, Any] | None:
     k = key(src)
     hit = next((e for e in _read() if e.get("id") == k), None)
-    if hit:
-        return hit
-    return next((e for e in _preset_defaults() if e["id"] == k), None)
+    shipped = next((e for e in _preset_defaults() if e["id"] == k), None)
+    if hit and not hit.get("plan") and shipped:
+        return {**shipped, **{kk: v for kk, v in hit.items() if v is not None}, "plan": shipped["plan"], "shipped": True}
+    return hit or shipped
 
 
 def remember(src: dict[str, Any], *, name: str | None = None, size: int | None = None, labels: int | None = None,
@@ -79,9 +80,15 @@ def remember(src: dict[str, Any], *, name: str | None = None, size: int | None =
 
 def list_all() -> list[dict[str, Any]]:
     mine = _read()
-    ids = {e.get("id") for e in mine}
-    shipped = [e for e in _preset_defaults() if e["id"] not in ids]
-    return sorted(mine, key=lambda e: -e.get("last_used", 0)) + shipped
+    defaults = {e["id"]: e for e in _preset_defaults()}
+    merged = []
+    for e in mine:
+        d = defaults.get(e.get("id"))
+        if d and not e.get("plan"):
+            e = {**d, **{kk: v for kk, v in e.items() if v is not None}, "plan": d["plan"], "shipped": True}
+        merged.append(e)
+    ids = {e.get("id") for e in merged}
+    return sorted(merged, key=lambda e: -e.get("last_used", 0)) + [d for i, d in defaults.items() if i not in ids]
 
 
 def clear_plan(entry_id: str) -> bool:
