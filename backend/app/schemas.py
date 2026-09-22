@@ -91,6 +91,7 @@ class EvaluateRow(BaseModel):
     confidence: float | None = None
     correct: bool
     raw: float | None = None      # score value or yes-probability
+    ms: float | None = None       # decision latency for this sample (excludes model load)
 
 
 class EvaluateResponse(BaseModel):

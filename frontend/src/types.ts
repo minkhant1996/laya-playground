@@ -42,6 +42,7 @@ export interface EvalRow {
   confidence: number | null
   correct: boolean
   raw?: number | null
+  ms?: number | null
 }
 
 export interface EvalResult {
@@ -143,9 +144,9 @@ export interface UsageSummary {
 }
 
 export type EvalEvent =
-  | { type: 'status'; message: string }
+  | { type: 'status'; message: string; stage?: string; load_seconds?: number }
   | { type: 'start'; n: number; labels: string[]; criteria: Record<string, string>; engine: Engine }
-  | { type: 'row'; i: number; n: number; row: EvalRow; accuracy: number; elapsed: number; eta: number }
+  | { type: 'row'; i: number; n: number; row: EvalRow; accuracy: number; elapsed: number; eta: number; avg_ms: number; query_ms: number }
   | { type: 'done'; result: EvalResult }
   | { type: 'error'; message: string }
 

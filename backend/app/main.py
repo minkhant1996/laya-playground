@@ -373,6 +373,12 @@ async def _evaluate_events(req: EvaluateRequest):
                           "split": req.split if src.kind == "hf" else None}, name=name, size=len(ds), labels=len(names))
     yield {"type": "start", "n": n_total, "labels": ids, "criteria": criteria, "engine": engine, "question_type": qtype}
 
+    load_s = 0.0
+    if engine.get("kind") == "laya" and not laya_service.is_loaded():
+        yield {"type": "status", "stage": "loading", "message": "loading Laya checkpoints into memory (first use, ~2.3 GB)…"}
+        load_s = await laya_service.ensure_loaded()
+        yield {"type": "status", "stage": "loaded", "message": f"Laya ready in {load_s:.1f}s", "load_seconds": round(load_s, 1)}
+
     def make_state(ex: dict[str, Any]) -> tuple[Any, str]:
         if isinstance(state_cols, list):
             st = {k: ex[k] for k in state_cols if k in ex}
@@ -389,14 +395,18 @@ async def _evaluate_events(req: EvaluateRequest):
     correct = 0
     abs_err = 0.0
     t0 = time.perf_counter()
+    query_ms_total = 0.0
     for i, ex in enumerate(subset):
         state, text = make_state(ex)
         gv = gold_value(ex[label_col])
         mapped = label_map.get(gv, label_map.get(dsvc.to_label_id(gv), gv))
+        tq = time.perf_counter()
         try:
             res = await laya_service.decide(state, question, engine, shortlist_k)
         except Exception as e:
             raise HTTPException(500, f"decision error on sample {i + 1}: {e}")
+        query_ms = (time.perf_counter() - tq) * 1000
+        query_ms_total += query_ms
         routing = routing or res.get("routing")
         ans = (res.get("answers") or {}).get("q", {})
         raw: float | None = None
@@ -421,14 +431,16 @@ async def _evaluate_events(req: EvaluateRequest):
         correct += int(ok)
         per[gold]["n"] += 1
         per[gold]["correct"] += int(ok)
-        row = EvaluateRow(text=text, gold=gold, pred=pred, confidence=conf, correct=ok, raw=raw)
+        row = EvaluateRow(text=text, gold=gold, pred=pred, confidence=conf, correct=ok, raw=raw, ms=round(query_ms, 1))
         rows.append(row)
         elapsed = time.perf_counter() - t0
+        avg_ms = query_ms_total / (i + 1)
         yield {"type": "row", "i": i + 1, "n": n_total, "row": row.model_dump(), "accuracy": correct / (i + 1),
-               "elapsed": round(elapsed, 1), "eta": round(elapsed / (i + 1) * (n_total - i - 1), 1)}
+               "elapsed": round(elapsed, 1), "eta": round(avg_ms / 1000 * (n_total - i - 1), 1), "avg_ms": round(avg_ms, 1), "query_ms": round(query_ms, 1)}
 
     n = len(rows)
     extra = {"mae": abs_err / n} if qtype == "score" and n else {}
+    extra.update({"avg_query_ms": query_ms_total / n if n else 0.0, "total_query_s": query_ms_total / 1000, "model_load_s": load_s})
     result = EvaluateResponse(
         dataset_id=name, question_type=qtype, extra_metrics=extra, shortlist_k=shortlist_k, n=n, accuracy=(correct / n if n else 0.0), labels=ids, criteria=criteria,
         routing=routing, rows=rows, per_label={k: {"n": v["n"], "accuracy": v["correct"] / v["n"]} for k, v in per.items()},

@@ -51,7 +51,8 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   const [busy, setBusy] = useState(false)
   const [engine, setEngine] = useState<Engine>(defaultEngine)
   const [status, setStatus] = useState('')
-  const [live, setLive] = useState<{ i: number; n: number; accuracy: number; elapsed: number; eta: number } | null>(null)
+  const [live, setLive] = useState<{ i: number; n: number; accuracy: number; elapsed: number; eta: number; avg_ms?: number } | null>(null)
+  const [loadInfo, setLoadInfo] = useState<string>('')
   const [liveRows, setLiveRows] = useState<EvalRow[]>([])
   const abortRef = useRef<AbortController | null>(null)
   useEffect(() => {
@@ -168,6 +169,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
     setResult(null)
     setLive({ i: 0, n: limit, accuracy: 0, elapsed: 0, eta: 0 })
     setLiveRows([])
+    setLoadInfo('')
     setStatus('starting')
     const ac = new AbortController()
     abortRef.current = ac
@@ -184,13 +186,16 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
           plan: usePlan && plan ? { state_columns: plan.state_columns, label_column: plan.label_column, question: plan.question, label_map: plan.label_map } : undefined,
         },
         (ev) => {
-          if (ev.type === 'status') setStatus(ev.message)
+          if (ev.type === 'status') {
+            setStatus(ev.message)
+            if (ev.stage === 'loaded' && ev.load_seconds) setLoadInfo(`model load ${ev.load_seconds}s (excluded from timings)`)
+          }
           else if (ev.type === 'start') {
             setStatus(`running ${ev.n} samples on ${ev.engine.kind === 'laya' ? 'Laya (local)' : ev.engine.model}`)
             setLive({ i: 0, n: ev.n, accuracy: 0, elapsed: 0, eta: 0 })
           }
           else if (ev.type === 'row') {
-            setLive({ i: ev.i, n: ev.n, accuracy: ev.accuracy, elapsed: ev.elapsed, eta: ev.eta })
+            setLive({ i: ev.i, n: ev.n, accuracy: ev.accuracy, elapsed: ev.elapsed, eta: ev.eta, avg_ms: ev.avg_ms })
             setLiveRows((r) => [ev.row, ...r].slice(0, 12))
           } else if (ev.type === 'done') {
             setResult(ev.result)
@@ -457,7 +462,9 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
             <div className="live">
               <span>
                 status: <b>{status}</b>
+                {status.startsWith('loading') && <span className="step on" style={{ marginLeft: 6 }}>loading model</span>}
               </span>
+              {loadInfo && <span>{loadInfo}</span>}
               {live && (
                 <>
                   <span>
@@ -473,6 +480,9 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
                       </span>
                       <span>
                         ETA <b>{live.eta}s</b>
+                      </span>
+                      <span>
+                        avg per query <b>{live.avg_ms !== undefined ? (live.avg_ms >= 1000 ? `${(live.avg_ms / 1000).toFixed(2)} s` : `${live.avg_ms.toFixed(0)} ms`) : '—'}</b>
                       </span>
                     </>
                   )}
@@ -515,6 +525,15 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
                 {result.shortlist_k ? <span className="small"> (top-{result.shortlist_k})</span> : null}
               </div>
             </div>
+            {result.extra_metrics?.avg_query_ms !== undefined && (
+              <div className="metric">
+                <div className="k">avg per query</div>
+                <div className="v">{result.extra_metrics.avg_query_ms >= 1000 ? `${(result.extra_metrics.avg_query_ms / 1000).toFixed(2)} s` : `${result.extra_metrics.avg_query_ms.toFixed(0)} ms`}</div>
+                <div className="small">
+                  {result.extra_metrics.total_query_s.toFixed(1)}s total{result.extra_metrics.model_load_s ? ` · +${result.extra_metrics.model_load_s.toFixed(1)}s model load` : ''}
+                </div>
+              </div>
+            )}
             <div className="metric">
               <div className="k">checkpoint</div>
               <div className="v" style={{ fontSize: 15 }}>{result.routing?.model ?? '—'}</div>

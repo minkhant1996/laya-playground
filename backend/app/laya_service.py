@@ -8,6 +8,21 @@ os.environ.setdefault("USE_TF", "0")  # README: TF probing can hang transformers
 os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
 
 
+def is_loaded() -> bool:
+    return get_router.cache_info().currsize > 0
+
+
+async def ensure_loaded() -> float:
+    """Load the Laya checkpoints if needed; returns seconds spent (0 if already loaded)."""
+    import time
+
+    if is_loaded():
+        return 0.0
+    t0 = time.perf_counter()
+    await asyncio.to_thread(get_router)
+    return time.perf_counter() - t0
+
+
 @lru_cache(maxsize=1)
 def get_router():
     from laya import Router

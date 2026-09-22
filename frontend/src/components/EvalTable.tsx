@@ -9,6 +9,7 @@ export default function EvalTable({ rows, compact }: { rows: EvalRow[]; compact?
           <th>actual</th>
           <th>predicted</th>
           <th style={{ textAlign: 'right' }}>confidence</th>
+          <th style={{ textAlign: 'right' }}>time</th>
           <th style={{ textAlign: 'right' }}>result</th>
         </tr>
       </thead>
@@ -19,6 +20,7 @@ export default function EvalTable({ rows, compact }: { rows: EvalRow[]; compact?
             <td>{r.gold}</td>
             <td className={r.correct ? 'ok' : 'bad'}>{r.pred}</td>
             <td style={{ textAlign: 'right' }}>{r.confidence != null ? `${(r.confidence * 100).toFixed(0)}%` : ''}</td>
+            <td style={{ textAlign: 'right' }} className="small">{r.ms != null ? (r.ms >= 1000 ? `${(r.ms / 1000).toFixed(2)} s` : `${r.ms.toFixed(0)} ms`) : ''}</td>
             <td style={{ textAlign: 'right' }}>
               <span className={`badge ${r.correct ? 'ok' : 'bad'}`}>{r.correct ? '✓ correct' : '✗ wrong'}</span>
             </td>
