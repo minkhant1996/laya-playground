@@ -118,6 +118,7 @@ export default function DatasetEval({
     eta: number;
     avg_ms?: number;
     concurrency?: number;
+    mem?: { ram_mb: number; vram_mb: number | null } | null;
   } | null>(null);
   const [loadInfo, setLoadInfo] = useState<string>("");
   const [liveRows, setLiveRows] = useState<EvalRow[]>([]);
@@ -354,7 +355,7 @@ export default function DatasetEval({
             );
             setLive({ i: 0, n: ev.n, accuracy: 0, elapsed: 0, eta: 0 });
           } else if (ev.type === "row") {
-            setLive({
+            setLive((prev) => ({
               i: ev.i,
               n: ev.n,
               accuracy: ev.accuracy,
@@ -362,7 +363,8 @@ export default function DatasetEval({
               eta: ev.eta,
               avg_ms: ev.avg_ms,
               concurrency: ev.concurrency,
-            });
+              mem: ev.mem ?? prev?.mem ?? null,
+            }));
             setLiveRows((r) => [ev.row, ...r].slice(0, 12));
           } else if (ev.type === "done") {
             out = ev.result;
@@ -1144,6 +1146,18 @@ export default function DatasetEval({
                             </b>
                             {live.concurrency && live.concurrency > 1 ? ` · ${live.concurrency} in parallel` : ""}
                           </span>
+                        {live.mem && (
+                          <span title="Backend process memory while Laya runs (— for Jev, which runs in the cloud)">
+                            RAM <b>{(live.mem.ram_mb / 1024).toFixed(2)} GB</b>
+                            {" · VRAM "}
+                            <b>{live.mem.vram_mb != null ? `${(live.mem.vram_mb / 1024).toFixed(2)} GB` : "—"}</b>
+                          </span>
+                        )}
+                        {!live.mem && engine.kind === "jev" && (
+                          <span>
+                            RAM <b>—</b> · VRAM <b>—</b> <span className="small">(cloud)</span>
+                          </span>
+                        )}
                         )}
                       </>
                     )}

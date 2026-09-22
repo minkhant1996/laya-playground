@@ -567,17 +567,19 @@ async def _evaluate_events(req: EvaluateRequest):
             per[gold]["correct"] += int(ok)
             row = EvaluateRow(text=text, gold=gold, pred=pred, confidence=conf, correct=ok, raw=raw, ms=round(query_ms, 1))
             rows.append(row)
-            if track_mem and (i % 5 == 0 or i == n_total - 1):
+            cur_mem = None
+            if track_mem and (i % 2 == 0 or i == n_total - 1):
                 m = sysinfo.quick_mem()
                 peak_rss = max(peak_rss, m["rss_mb"])
                 if m["vram_mb"] is not None:
                     peak_vram = max(peak_vram or 0.0, m["vram_mb"])
+                cur_mem = {"ram_mb": round(m["rss_mb"], 1), "vram_mb": (round(m["vram_mb"], 1) if m["vram_mb"] is not None else None)}
             elapsed = time.perf_counter() - t0
             avg_ms = query_ms_total / (i + 1)                      # mean per-request latency
             throughput_s = elapsed / (i + 1)                       # wall-clock per completed sample (parallelism included)
             yield {"type": "row", "i": i + 1, "n": n_total, "row": row.model_dump(), "accuracy": correct / (i + 1),
                    "elapsed": round(elapsed, 1), "eta": round(throughput_s * (n_total - i - 1), 1), "avg_ms": round(avg_ms, 1),
-                   "query_ms": round(query_ms, 1), "concurrency": concurrency}
+                   "query_ms": round(query_ms, 1), "concurrency": concurrency, "mem": cur_mem}
     finally:
         if tasks:
             for t in tasks:
