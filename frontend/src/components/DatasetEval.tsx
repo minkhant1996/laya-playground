@@ -466,8 +466,7 @@ export default function DatasetEval({
           : mode === "hf"
             ? !!inspect && !inspect.needs_config
             : !!upload;
-  const hasColumns = mode === "preset" || (!!textCol && !!labelCol);
-  const ready = hasSource && ((plan && usePlan) || hasColumns);
+  const ready = hasSource && !!plan && usePlan && !planning;
   const notReadyWhy = !hasSource
     ? mode === "hf" || mode === "kaggle"
       ? "Load a dataset link first."
@@ -476,9 +475,11 @@ export default function DatasetEval({
         : mode === "saved"
           ? "Pick a saved dataset first."
           : "Pick a preset."
-    : !ready
-      ? 'Not prepared: click "Prepare with AI" or choose the text/state and label columns.'
-      : "";
+    : planning
+      ? "Preparing the data with AI…"
+      : !plan || !usePlan
+        ? "Prepare data with AI first."
+        : "";
   const columns =
     mode === "hf"
       ? inspect?.columns
