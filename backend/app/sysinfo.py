@@ -88,3 +88,21 @@ def snapshot() -> dict[str, Any]:
         "os": f"{platform.system()} {platform.release()}",
         "note": note,
     }
+
+
+def quick_mem() -> dict[str, float | None]:
+    """Cheap sample for per-run tracking: process RSS and (if CUDA/MPS) GPU memory used, in MB."""
+    proc = psutil.Process(os.getpid())
+    rss = proc.memory_info().rss / 2**20
+    vram = None
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            free, total = torch.cuda.mem_get_info(0)
+            vram = (total - free) / 2**20
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            vram = torch.mps.driver_allocated_memory() / 2**20
+    except Exception:
+        pass
+    return {"rss_mb": rss, "vram_mb": vram}

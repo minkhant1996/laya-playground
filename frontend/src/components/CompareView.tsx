@@ -1,5 +1,6 @@
 import type { EvalResult } from '../types'
 
+const mem = (mb?: number) => (mb === undefined ? '—' : `${(mb / 1024).toFixed(2)} GB`)
 const ms = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(2)} s` : `${v.toFixed(0)} ms`)
 
 /** Side-by-side comparison of two evaluation results over the same samples. */
@@ -76,8 +77,11 @@ export default function CompareView({ a, b, labelA, labelB }: { a: EvalResult; b
           <Row k="total decision time" va={`${(a.extra_metrics?.total_query_s ?? 0).toFixed(1)} s`} vb={`${(b.extra_metrics?.total_query_s ?? 0).toFixed(1)} s`} />
           <Row k="avg confidence" va={`${(avgConf(a) * 100).toFixed(0)}%`} vb={`${(avgConf(b) * 100).toFixed(0)}%`} />
           {a.extra_metrics?.mae !== undefined && <Row k="MAE (score)" va={a.extra_metrics.mae.toFixed(2)} vb={(b.extra_metrics?.mae ?? 0).toFixed(2)} best={a.extra_metrics.mae <= (b.extra_metrics?.mae ?? 0) ? 'a' : 'b'} />}
+          <Row k="RAM · backend peak" va={mem(a.extra_metrics?.ram_peak_mb)} vb={mem(b.extra_metrics?.ram_peak_mb)} />
+          <Row k="VRAM · peak" va={mem(a.extra_metrics?.vram_peak_mb)} vb={mem(b.extra_metrics?.vram_peak_mb)} />
           <Row k="checkpoint" va={a.routing?.model ?? '—'} vb={b.routing?.model ?? '—'} />
           <Row k="cost" va="free (local)" vb="OpenRouter, see Usage" />
+          <Row k="runs on" va="your machine (CPU/GPU)" vb="TypeSafe cloud via OpenRouter" />
         </tbody>
       </table>
       <div className="scroll" style={{ maxHeight: 520 }}>

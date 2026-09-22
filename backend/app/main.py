@@ -508,6 +508,12 @@ async def _evaluate_events(req: EvaluateRequest):
     query_ms_total = 0.0
 
     # Laya (local, CPU/GPU bound) runs sequentially; hosted Jev is API bound, so run several in flight.
+    from . import sysinfo
+
+    track_mem = engine.get("kind") == "laya"
+    mem0 = sysinfo.quick_mem() if track_mem else None
+    peak_rss = mem0["rss_mb"] if mem0 else 0.0
+    peak_vram = mem0["vram_mb"] if mem0 else None
     concurrency = 1 if engine.get("kind") == "laya" else 6
     sem = asyncio.Semaphore(concurrency)
 
@@ -561,6 +567,11 @@ async def _evaluate_events(req: EvaluateRequest):
             per[gold]["correct"] += int(ok)
             row = EvaluateRow(text=text, gold=gold, pred=pred, confidence=conf, correct=ok, raw=raw, ms=round(query_ms, 1))
             rows.append(row)
+            if track_mem and (i % 5 == 0 or i == n_total - 1):
+                m = sysinfo.quick_mem()
+                peak_rss = max(peak_rss, m["rss_mb"])
+                if m["vram_mb"] is not None:
+                    peak_vram = max(peak_vram or 0.0, m["vram_mb"])
             elapsed = time.perf_counter() - t0
             avg_ms = query_ms_total / (i + 1)                      # mean per-request latency
             throughput_s = elapsed / (i + 1)                       # wall-clock per completed sample (parallelism included)
@@ -575,6 +586,10 @@ async def _evaluate_events(req: EvaluateRequest):
     n = len(rows)
     extra = {"mae": abs_err / n} if qtype == "score" and n else {}
     extra.update({"avg_query_ms": query_ms_total / n if n else 0.0, "total_query_s": query_ms_total / 1000, "model_load_s": load_s})
+    if track_mem and mem0:
+        extra.update({"ram_peak_mb": peak_rss, "ram_delta_mb": peak_rss - mem0["rss_mb"]})
+        if peak_vram is not None:
+            extra["vram_peak_mb"] = peak_vram
     result = EvaluateResponse(
         dataset_id=name, question_type=qtype, extra_metrics=extra, shortlist_k=shortlist_k, n=n, accuracy=(correct / n if n else 0.0), labels=ids, criteria=criteria,
         routing=routing, rows=rows, per_label={k: {"n": v["n"], "accuracy": v["correct"] / v["n"]} for k, v in per.items()},

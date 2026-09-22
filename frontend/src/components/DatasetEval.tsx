@@ -1214,6 +1214,9 @@ export default function DatasetEval({
                       : `${result.extra_metrics.avg_query_ms.toFixed(0)} ms`}
                   </div>
                   <div className="small">
+                    {result.extra_metrics.ram_peak_mb !== undefined ? `RAM peak ${(result.extra_metrics.ram_peak_mb / 1024).toFixed(2)} GB` : ''}
+                    {result.extra_metrics.vram_peak_mb !== undefined ? ` · VRAM ${(result.extra_metrics.vram_peak_mb / 1024).toFixed(2)} GB` : ''}
+                    {result.extra_metrics.ram_peak_mb !== undefined ? ' · ' : ''}
                     {result.extra_metrics.total_query_s.toFixed(1)}s total
                     {result.extra_metrics.model_load_s
                       ? ` · +${result.extra_metrics.model_load_s.toFixed(1)}s model load`
