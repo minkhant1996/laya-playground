@@ -35,6 +35,42 @@ a JSON object mapping each label (exactly as given) to a concise description (ma
 what texts belong to that label. Do not add or rename labels."""
 
 
+def _repair_json(text: str) -> str:
+    """Fix the usual LLM slips: trailing commas, and truncated output (close open strings/brackets)."""
+    text = re.sub(r",\s*([}\]])", r"\1", text)
+    # if truncated, cut back to the last complete value and close what is open
+    stack: list[str] = []
+    in_str = False
+    esc = False
+    last_good = 0
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+        else:
+            if ch == '"':
+                in_str = True
+            elif ch in "{[":
+                stack.append("}" if ch == "{" else "]")
+            elif ch in "}]":
+                if stack:
+                    stack.pop()
+                if not stack:
+                    last_good = i + 1
+    if not stack:
+        return text
+    out = text[:last_good] if last_good and not in_str else text
+    if in_str:
+        out = text + '"'
+    out = re.sub(r",\s*$", "", out.rstrip())
+    out = re.sub(r":\s*$", ": null", out)
+    return out + "".join(reversed(stack))
+
+
 def _extract_json(text: str) -> Any:
     text = text.strip()
     fence = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
@@ -42,9 +78,13 @@ def _extract_json(text: str) -> Any:
         text = fence.group(1).strip()
     start = text.find("{")
     end = text.rfind("}")
-    if start == -1 or end == -1:
+    if start == -1:
         raise ValueError(f"No JSON object found in model output: {text[:200]}")
-    return json.loads(text[start : end + 1])
+    candidate = text[start : end + 1] if end > start else text[start:]
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError:
+        return json.loads(_repair_json(text[start:]))
 
 
 def system_prompt() -> str:
@@ -53,7 +93,7 @@ def system_prompt() -> str:
     return SYSTEM_PROMPT + guide()
 
 
-async def chat_messages(messages: list[dict[str, str]], purpose: str = "chat", json_mode: bool = True, temperature: float = 0.2) -> Any:
+async def chat_messages(messages: list[dict[str, str]], purpose: str = "chat", json_mode: bool = True, temperature: float = 0.2, max_tokens: int = 8000) -> Any:
     """Generic chat completion. Returns parsed JSON (json_mode) or the raw text."""
     api_key = get_openrouter_key()
     if not api_key:
@@ -64,13 +104,23 @@ async def chat_messages(messages: list[dict[str, str]], purpose: str = "chat", j
         r = await client.post(
             f"{settings.openrouter_base_url}/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "HTTP-Referer": "http://localhost:5173", "X-Title": "System One Playground"},
-            json={"model": model, "messages": messages, "temperature": temperature},
+            json={"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens,
+                  **({"response_format": {"type": "json_object"}} if json_mode else {})},
         )
+        if r.status_code >= 400 and json_mode and "response_format" in r.text:
+            # provider without JSON mode: retry plainly
+            r = await client.post(
+                f"{settings.openrouter_base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "HTTP-Referer": "http://localhost:5173", "X-Title": "System One Playground"},
+                json={"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens},
+            )
         if r.status_code >= 400:
             usage.record(purpose=purpose, engine="openrouter", model=model, latency_ms=(time.perf_counter() - t0) * 1000, ok=False, error=r.text[:200])
         r.raise_for_status()
         body = r.json()
     content = body["choices"][0]["message"]["content"]
+    if json_mode and (body["choices"][0].get("finish_reason") == "length"):
+        content = content  # truncated: _extract_json will attempt a repair
     u = body.get("usage") or {}
     usage.record(purpose=purpose, engine="openrouter", model=model, input_tokens=u.get("prompt_tokens"), output_tokens=u.get("completion_tokens"),
                  latency_ms=(time.perf_counter() - t0) * 1000)
@@ -290,7 +340,14 @@ async def plan_dataset(name: str, columns: list[str], sample: list[dict[str, Any
 
     user = json.dumps({"dataset": name, "columns": columns, "sample_rows": sample[:8], "suggested_label_column": label_column,
                        "distinct_label_values": label_values[:120], "n_distinct_labels": len(label_values)}, ensure_ascii=False, default=str)
-    out = await chat_messages([{"role": "system", "content": PLAN_PROMPT + guide(3500)}, {"role": "user", "content": user}], purpose="plan", json_mode=True)
+    compact = "\n\nThere are many labels: keep every rubric under 8 words and output compact JSON (no line breaks inside strings)." if len(label_values) > 30 else ""
+    msgs = [{"role": "system", "content": PLAN_PROMPT + guide(2500) + compact}, {"role": "user", "content": user}]
+    try:
+        out = await chat_messages(msgs, purpose="plan", json_mode=True, temperature=0, max_tokens=16000)
+    except (json.JSONDecodeError, ValueError) as e:
+        # one retry, stricter
+        msgs.append({"role": "user", "content": f"Your previous answer was not valid JSON ({e}). Reply again with ONLY a single compact JSON object, no markdown, no comments."})
+        out = await chat_messages(msgs, purpose="plan", json_mode=True, temperature=0, max_tokens=16000)
     q = out.get("question") or {}
     if q.get("type") not in ("choice", "score", "noul"):
         raise ValueError("planner returned no valid question")
