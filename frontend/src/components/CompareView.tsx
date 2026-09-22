@@ -80,7 +80,7 @@ export default function CompareView({ a, b, labelA, labelB }: { a: EvalResult; b
           <Row k="cost" va="free (local)" vb="OpenRouter, see Usage" />
         </tbody>
       </table>
-      <div className="scroll" style={{ maxHeight: 480 }}>
+      <div style={{ overflowX: 'auto' }}>
         <table>
           <thead>
             <tr>
@@ -109,7 +109,7 @@ export default function CompareView({ a, b, labelA, labelB }: { a: EvalResult; b
           </tbody>
         </table>
       </div>
-      <details>
+      <details style={{ marginTop: 12 }}>
         <summary>Per-label accuracy</summary>
         <table className="aligned">
           <thead>

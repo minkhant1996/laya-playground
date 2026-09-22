@@ -1,4 +1,4 @@
-import type { I18nStatus, ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, LearnDoc, LearnMsg, LearnSource, LibraryEntry, ORModel, PlanResult, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
+import type { EvalHistoryEntry, EvalHistoryFull, I18nStatus, ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, LearnDoc, LearnMsg, LearnSource, LibraryEntry, ORModel, PlanResult, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`/api${path}`, {
@@ -125,6 +125,12 @@ export const api = {
   learnSession: (id: string) => req<{ id: string; title: string; messages: LearnMsg[] }>(`/learn/sessions/${id}`),
   deleteLearnSession: (id: string) => req<{ ok: boolean }>(`/learn/sessions/${id}`, { method: 'DELETE' }),
   deleteAllLearnSessions: () => req<{ ok: boolean; deleted: number }>('/learn/sessions', { method: 'DELETE' }),
+  evalSave: (body: { kind: 'eval' | 'compare'; title: string; dataset: string; engine: string; result: EvalResult; result_b?: EvalResult | null; label_a?: string; label_b?: string }) =>
+    req<EvalHistoryEntry>('/evals', { method: 'POST', body: JSON.stringify(body) }),
+  evals: () => req<EvalHistoryEntry[]>('/evals'),
+  evalGet: (id: string) => req<EvalHistoryFull>(`/evals/${id}`),
+  evalDelete: (id: string) => req<{ ok: boolean }>(`/evals/${id}`, { method: 'DELETE' }),
+  evalDeleteAll: () => req<{ ok: boolean; deleted: number }>('/evals', { method: 'DELETE' }),
   library: () => req<LibraryEntry[]>('/datasets/library'),
   savePlan: (source: DatasetSource, split: string, plan: PlanResult) => req<{ ok: boolean; id: string }>('/datasets/library/plan', { method: 'POST', body: JSON.stringify({ source, split, plan }) }),
   clearPlan: (id: string) => req<{ ok: boolean }>(`/datasets/library/${id}/plan`, { method: 'DELETE' }),

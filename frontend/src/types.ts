@@ -247,3 +247,25 @@ export interface I18nStatus {
   have: { learn: number; chat: number }
   languages: number
 }
+
+export interface EvalHistoryEntry {
+  id: string
+  kind: 'eval' | 'compare'
+  title: string
+  created: number
+  dataset: string
+  engine: string
+  n: number | null
+  accuracy: number | null
+  accuracy_b: number | null
+  avg_ms: number | null
+  avg_ms_b: number | null
+  question_type: string | null
+}
+
+export interface EvalHistoryFull extends EvalHistoryEntry {
+  result: EvalResult
+  result_b: EvalResult | null
+  label_a: string | null
+  label_b: string | null
+}

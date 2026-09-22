@@ -172,6 +172,65 @@ async def list_datasets():
     return list(dsvc.DATASETS.values())
 
 
+# ---------------------------------------------------------------- evaluation history
+class EvalSaveRequest(BaseModel):
+    kind: Literal["eval", "compare"]
+    title: str = PField(max_length=200)
+    dataset: str = ""
+    engine: str = ""
+    result: dict[str, Any]
+    result_b: dict[str, Any] | None = None
+    label_a: str | None = None
+    label_b: str | None = None
+
+
+@app.post("/api/evals")
+async def eval_save(req: EvalSaveRequest):
+    from . import evals
+
+    r, rb = req.result, req.result_b or {}
+    return evals.save({
+        "kind": req.kind, "title": req.title, "dataset": req.dataset, "engine": req.engine,
+        "n": r.get("n"), "accuracy": r.get("accuracy"), "avg_ms": (r.get("extra_metrics") or {}).get("avg_query_ms"),
+        "accuracy_b": rb.get("accuracy"), "avg_ms_b": (rb.get("extra_metrics") or {}).get("avg_query_ms"),
+        "question_type": r.get("question_type"), "result": r, "result_b": req.result_b, "label_a": req.label_a, "label_b": req.label_b,
+    })
+
+
+@app.get("/api/evals")
+async def eval_list():
+    from . import evals
+
+    return evals.list_all()
+
+
+@app.get("/api/evals/{eid}")
+async def eval_get(eid: str):
+    from . import evals
+
+    try:
+        return evals.get(eid)
+    except (FileNotFoundError, ValueError) as e:
+        raise HTTPException(404, str(e))
+
+
+@app.delete("/api/evals/{eid}")
+async def eval_delete(eid: str):
+    from . import evals
+
+    try:
+        return {"ok": evals.delete(eid)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/evals")
+async def eval_delete_all():
+    from . import evals
+
+    return {"ok": True, "deleted": evals.delete_all()}
+
+
 @app.get("/api/datasets/library")
 async def dataset_library():
     """Previously loaded Kaggle / Hugging Face / uploaded sources, ready to reuse (data is cached locally)."""

@@ -4,7 +4,7 @@ import EvalTable from './EvalTable'
 import PlanEditor from './PlanEditor'
 import CompareView from './CompareView'
 import { api } from '../api'
-import type { DatasetInfo, DatasetSource, Engine, EvalResult, EvalRow, EvalPlan, InspectResult, KaggleInspect, LibraryEntry, PlanResult, UploadResult } from '../types'
+import type { DatasetInfo, DatasetSource, Engine, EvalResult, EvalRow, EvalHistoryEntry, EvalPlan, InspectResult, KaggleInspect, LibraryEntry, PlanResult, UploadResult } from '../types'
 
 type Mode = 'preset' | 'hf' | 'upload' | 'kaggle' | 'saved'
 
@@ -26,6 +26,9 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   const [planSource, setPlanSource] = useState<'saved' | 'new' | null>(null)
   const [refreshCriteria, setRefreshCriteria] = useState(false)
   const [compare, setCompare] = useState<{ a: EvalResult; b: EvalResult } | null>(null)
+  const [history, setHistory] = useState<EvalHistoryEntry[]>([])
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const loadHistory = () => api.evals().then(setHistory).catch(() => setHistory([]))
   const [compareStage, setCompareStage] = useState('')
 
   // saved library
@@ -67,7 +70,26 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   useEffect(() => {
     api.datasets().then(setDatasets).catch(() => setDatasets([]))
     loadLib()
+    loadHistory()
   }, [])
+  const engineLabel = (e: Engine) => (e.kind === 'laya' ? 'Laya (local)' : `Jev (${e.model ?? 'jev-1.13'})`)
+  const sourceLabel = () => (mode === 'preset' ? (datasets.find((d) => d.id === datasetId)?.name ?? datasetId) : mode === 'saved' ? (saved?.name ?? '') : mode === 'kaggle' ? `${kg?.path ?? ''}/${kg?.file ?? ''}` : mode === 'hf' ? (inspect?.path ?? '') : (upload?.filename ?? ''))
+  async function openHistory(id: string) {
+    try {
+      const h = await api.evalGet(id)
+      if (h.kind === 'compare' && h.result_b) {
+        setCompare({ a: h.result, b: h.result_b })
+        setResult(null)
+      } else {
+        setCompare(null)
+        setResult(h.result)
+      }
+      setLive(null)
+      setError('')
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
   function pickSaved(e: LibraryEntry) {
     setSaved(e)
     setTextCol(e.text_column ?? '')
@@ -232,9 +254,16 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
     return out
   }
 
-  const run = () => {
+  const run = async () => {
     setCompare(null)
-    return runWith(engine)
+    const r = await runWith(engine)
+    if (r) {
+      api
+        .evalSave({ kind: 'eval', title: `${sourceLabel()} · ${engineLabel(engine)} · ${(r.accuracy * 100).toFixed(1)}% (${r.n})`, dataset: sourceLabel(), engine: engineLabel(engine), result: r })
+        .then(loadHistory)
+        .catch(() => undefined)
+    }
+    return r
   }
 
   async function compareModels() {
@@ -249,7 +278,22 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
     setCompareStage('2/2 · Jev via OpenRouter')
     const b = await runWith(jev)
     setCompareStage('')
-    if (b) setCompare({ a, b })
+    if (b) {
+      setCompare({ a, b })
+      api
+        .evalSave({
+          kind: 'compare',
+          title: `${sourceLabel()} · Laya ${(a.accuracy * 100).toFixed(1)}% vs Jev ${(b.accuracy * 100).toFixed(1)}% (${a.n})`,
+          dataset: sourceLabel(),
+          engine: 'Laya vs Jev',
+          result: a,
+          result_b: b,
+          label_a: 'Laya (local)',
+          label_b: `Jev (${b.routing?.model?.replace('jev:', '') ?? 'jev-1.13'})`,
+        })
+        .then(loadHistory)
+        .catch(() => undefined)
+    }
   }
 
   useEffect(() => {
@@ -278,6 +322,46 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
 
   return (
     <div>
+      <section className="panel" style={{ marginBottom: 16 }}>
+        <h2 style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }} onClick={() => setHistoryOpen(!historyOpen)}>
+          <span>
+            {historyOpen ? '▾' : '▸'} History ({history.length})
+          </span>
+          {historyOpen && history.length > 1 && (
+            <button
+              className="chip"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (confirm('Delete all evaluation history?')) api.evalDeleteAll().then(loadHistory)
+              }}
+            >
+              Delete all
+            </button>
+          )}
+        </h2>
+        {historyOpen && (
+          <div className="sessions" style={{ maxHeight: 260 }}>
+            {history.length === 0 && <div className="small">Every evaluation and comparison is saved here automatically.</div>}
+            {history.map((h) => (
+              <div key={h.id} className="session" onClick={() => openHistory(h.id)} title={new Date(h.created * 1000).toLocaleString()}>
+                <span>
+                  <span className="kind">{h.kind === 'compare' ? '⚖ compare' : h.question_type ?? 'eval'}</span> {h.title}
+                </span>
+                <small>{new Date(h.created * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
+                <button
+                  title="Delete"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    api.evalDelete(h.id).then(loadHistory)
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
       <section className="panel">
         <h2>Data source</h2>
         <div className="tabs" style={{ marginBottom: 12 }}>
