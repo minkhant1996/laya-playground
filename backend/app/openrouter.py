@@ -352,7 +352,11 @@ async def plan_dataset(name: str, columns: list[str], sample: list[dict[str, Any
     if q.get("type") not in ("choice", "score", "noul"):
         raise ValueError("planner returned no valid question")
     lm = {str(k): v for k, v in (out.get("label_map") or {}).items()}
-    # fill gaps so every label value maps somewhere
+    # the model sometimes maps by index ("0", "1", ...) instead of by name: copy those to the names
+    for i, v in enumerate(label_values):
+        if v not in lm and str(i) in lm:
+            lm[v] = lm[str(i)]
+    # fill remaining gaps so every label value maps somewhere
     for v in label_values:
         if v not in lm:
             if q["type"] == "choice":

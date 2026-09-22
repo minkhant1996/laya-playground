@@ -26,9 +26,30 @@ def key(src: dict[str, Any]) -> str:
 _key = key
 
 
+PRESET_PLANS = Path(__file__).resolve().parent.parent / "preset_plans.json"
+
+
+def _preset_defaults() -> list[dict[str, Any]]:
+    """Plans shipped with the app for the built-in presets (used until the user makes their own)."""
+    try:
+        data = json.loads(PRESET_PLANS.read_text()) if PRESET_PLANS.exists() else {}
+    except Exception:
+        return []
+    out = []
+    for pid, e in data.items():
+        src = {"kind": "preset", "dataset_id": pid}
+        plan = e.get("plan") or {}
+        out.append({**src, "id": key(src), "name": plan.get("dataset") or pid, "size": plan.get("size"), "labels": len(plan.get("label_values") or []),
+                    "plan": plan, "last_used": 0, "shipped": True, "split": e.get("split")})
+    return out
+
+
 def get(src: dict[str, Any]) -> dict[str, Any] | None:
     k = key(src)
-    return next((e for e in _read() if e.get("id") == k), None)
+    hit = next((e for e in _read() if e.get("id") == k), None)
+    if hit:
+        return hit
+    return next((e for e in _preset_defaults() if e["id"] == k), None)
 
 
 def remember(src: dict[str, Any], *, name: str | None = None, size: int | None = None, labels: int | None = None,
@@ -57,7 +78,10 @@ def remember(src: dict[str, Any], *, name: str | None = None, size: int | None =
 
 
 def list_all() -> list[dict[str, Any]]:
-    return sorted(_read(), key=lambda e: -e.get("last_used", 0))
+    mine = _read()
+    ids = {e.get("id") for e in mine}
+    shipped = [e for e in _preset_defaults() if e["id"] not in ids]
+    return sorted(mine, key=lambda e: -e.get("last_used", 0)) + shipped
 
 
 def clear_plan(entry_id: str) -> bool:
