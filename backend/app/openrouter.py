@@ -260,3 +260,50 @@ async def jev_decide(state: Any, questions: dict[str, Any], model: str = "jev-1.
                  extra={"questions": len(questions), **({"cost_usd": float(u["cost"])} if u.get("cost") is not None else {})})
     body["routing"] = {"model": f"jev:{served}", "repo": "typesafe/jev", "reason": f"TypeSafe Jev via {'OpenRouter' if via == 'openrouter' else 'TypeSafe API'}"}
     return body
+
+
+# ---------------------------------------------------------------- dataset planner (agent layer)
+PLAN_PROMPT = """You prepare a labelled dataset for evaluation with a System One decision model (Laya / Jev).
+You are given the column names, a few sample rows, and the distinct values of the candidate label column.
+
+Decide:
+1. "state_columns": which columns the model should read. Use a single text column when one exists;
+   otherwise a list of the informative columns (they will be sent as a JSON object). Never include the label.
+2. "label_column": the column holding the ground truth.
+3. "question": ONE typed question that reproduces the label:
+   - "choice" when the label is a category: {"type":"choice","instructions":"...?","criteria":{option: "short rubric", ...}}
+     Options must be short snake_case names. Give every option a helpful rubric.
+   - "score" when the label is ordinal (e.g. 1-5 stars, low/medium/high): {"type":"score","instructions":"...?","criteria":["level 0 (lowest)", ..., "level N"]}
+   - "noul" when the label is binary yes/no: {"type":"noul","instructions":"yes/no question?"}
+4. "label_map": maps EVERY distinct dataset label value (as a string) to the answer:
+   choice -> option name; score -> level index (integer, 0-based); noul -> true/false.
+5. "rationale": one or two sentences.
+
+Respond with ONLY a JSON object with keys state_columns, label_column, question, label_map, rationale.
+
+Question-writing guidance (from the TypeSafe/Jev skill):
+"""
+
+
+async def plan_dataset(name: str, columns: list[str], sample: list[dict[str, Any]], label_column: str | None, label_values: list[str]) -> dict[str, Any]:
+    from .question_guide import guide
+
+    user = json.dumps({"dataset": name, "columns": columns, "sample_rows": sample[:8], "suggested_label_column": label_column,
+                       "distinct_label_values": label_values[:120], "n_distinct_labels": len(label_values)}, ensure_ascii=False, default=str)
+    out = await chat_messages([{"role": "system", "content": PLAN_PROMPT + guide(3500)}, {"role": "user", "content": user}], purpose="plan", json_mode=True)
+    q = out.get("question") or {}
+    if q.get("type") not in ("choice", "score", "noul"):
+        raise ValueError("planner returned no valid question")
+    lm = {str(k): v for k, v in (out.get("label_map") or {}).items()}
+    # fill gaps so every label value maps somewhere
+    for v in label_values:
+        if v not in lm:
+            if q["type"] == "choice":
+                lm[v] = v.strip().replace(" ", "_").replace("-", "_")
+                q.setdefault("criteria", {}).setdefault(lm[v], v)
+            elif q["type"] == "score":
+                lm[v] = 0
+            else:
+                lm[v] = str(v).lower() in ("1", "true", "yes", "y", "t", "positive")
+    return {"state_columns": out.get("state_columns") or "__all__", "label_column": out.get("label_column") or label_column,
+            "question": q, "label_map": lm, "rationale": out.get("rationale", "")}

@@ -56,7 +56,21 @@ class DatasetSource(BaseModel):
     label_column: str | None = None
 
 
+class EvalPlan(BaseModel):
+    """Agent-prepared (and user-edited) evaluation setup: any question type + label mapping."""
+    state_columns: list[str] | str | None = None   # list, single column, or "__all__"
+    label_column: str | None = None
+    question: Question
+    label_map: dict[str, Any] = {}                  # dataset label value -> option | level index | bool
+
+
+class PlanRequest(BaseModel):
+    source: DatasetSource
+    split: str = "test"
+
+
 class EvaluateRequest(BaseModel):
+    plan: EvalPlan | None = None
     dataset_id: str | None = None      # legacy shortcut for a preset
     source: DatasetSource | None = None
     shortlist_k: int | None = Field(default=None, ge=2, le=64)
@@ -76,10 +90,13 @@ class EvaluateRow(BaseModel):
     pred: str
     confidence: float | None = None
     correct: bool
+    raw: float | None = None      # score value or yes-probability
 
 
 class EvaluateResponse(BaseModel):
     dataset_id: str
+    question_type: str = "choice"
+    extra_metrics: dict[str, float] = {}
     shortlist_k: int | None = None
     n: int
     accuracy: float

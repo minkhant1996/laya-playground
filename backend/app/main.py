@@ -19,7 +19,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field as PField
 from .schemas import (
-    DatasetInfo, DatasetSource, Engine, EvaluateRequest, EvaluateResponse, EvaluateRow,
+    DatasetInfo, DatasetSource, Engine, EvalPlan, EvaluateRequest, PlanRequest, EvaluateResponse, EvaluateRow,
     PredictRequest, PrepareRequest, PrepareResponse,
 )
 
@@ -244,7 +244,31 @@ async def upload_dataset(file: UploadFile):
         raise HTTPException(400, f"could not parse file: {e}")
 
 
-async def _resolve_source(req: EvaluateRequest):
+@app.post("/api/datasets/plan")
+async def plan_dataset(req: PlanRequest):
+    """Agent layer: inspect columns + sample rows and propose state columns, label column,
+    question type / instructions / criteria, and the label mapping."""
+    if not get_openrouter_key():
+        raise HTTPException(400, "OpenRouter key needed for the planner (Settings)")
+    try:
+        name, ds, text_col, label_col = await _resolve_source(EvaluateRequest(source=req.source, split=req.split), lenient=True)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"dataset load failed: {e}")
+    cols = list(ds.column_names)
+    sample = [{k: (v if isinstance(v, (int, float, bool)) or v is None else str(v)[:300]) for k, v in ds[i].items()} for i in range(min(8, len(ds)))]
+    label_values = dsvc.label_names(ds, label_col) if label_col else []
+    try:
+        plan = await openrouter.plan_dataset(name, cols, sample, label_col, [str(v) for v in label_values])
+    except Exception as e:
+        raise HTTPException(502, f"planner failed: {e}")
+    if text_col and text_col != "__all__" and not plan.get("state_columns"):
+        plan["state_columns"] = text_col
+    return {"dataset": name, "columns": cols, "size": len(ds), "label_values": [str(v) for v in label_values][:200], **plan}
+
+
+async def _resolve_source(req: EvaluateRequest, lenient: bool = False):
     """Return (name, dataset, text_column, label_column)."""
     src = req.source or DatasetSource(kind="preset", dataset_id=req.dataset_id)
     if src.kind == "preset":
@@ -276,6 +300,8 @@ async def _resolve_source(req: EvaluateRequest):
     if not text_col or not label_col:
         gt, gl = dsvc.guess_columns(ds.column_names)
         text_col, label_col = text_col or gt, label_col or gl
+    if lenient:
+        return path, ds, text_col, label_col
     if text_col == "__all__":
         text_col = "__all__"   # state = every other column as a JSON object
     elif not text_col or text_col not in ds.column_names:
@@ -288,26 +314,53 @@ async def _resolve_source(req: EvaluateRequest):
 async def _evaluate_events(req: EvaluateRequest):
     """Async generator of progress events; the last one is {"type": "done", "result": ...}."""
     yield {"type": "status", "message": "loading dataset"}
-    name, ds, text_col, label_col = await _resolve_source(req)
+    name, ds, text_col, label_col = await _resolve_source(req, lenient=bool(req.plan))
+    if req.plan and not (req.plan.label_column or label_col):
+        raise HTTPException(400, "plan needs a label_column")
 
+    plan = req.plan
+    if plan and plan.label_column:
+        label_col = plan.label_column
     names = dsvc.label_names(ds, label_col)
-    ids = [dsvc.to_label_id(n) for n in names]
     feat = ds.features[label_col]
     is_int_label = getattr(feat, "names", None) is not None or str(getattr(feat, "dtype", "")).startswith("int")
 
-    criteria = {lid: lid.replace("_", " ") for lid in ids}
-    if req.criteria:
-        criteria.update({dsvc.to_label_id(k): v for k, v in req.criteria.items() if dsvc.to_label_id(k) in criteria})
-    elif req.use_ai_criteria and get_openrouter_key():
-        yield {"type": "status", "message": f"writing criteria for {len(ids)} labels with {get_openrouter_model()}"}
-        try:
-            criteria = await openrouter.describe_labels(name, ids)
-        except Exception as e:
-            yield {"type": "status", "message": f"AI criteria failed ({e}); using label names"}
+    def gold_value(raw: Any) -> str:
+        """Dataset label as its human string (class name for ClassLabel / *_text columns)."""
+        if is_int_label and str(raw).lstrip("-").isdigit() and int(raw) < len(names):
+            return names[int(raw)]
+        return str(raw)
 
-    question = {"label": {"type": "choice", "instructions": req.question_instructions or "Which category does this text belong to?", "criteria": criteria}}
+    if plan:
+        qtype = plan.question.type
+        question = {"q": plan.question.model_dump(exclude_none=True)}
+        label_map = {str(k): v for k, v in plan.label_map.items()}
+        state_cols = plan.state_columns or text_col
+        ids = list(question["q"].get("criteria", {}).keys()) if qtype == "choice" else (
+            [str(i) for i in range(len(question["q"].get("criteria") or []))] if qtype == "score" else ["yes", "no"])
+        criteria = question["q"].get("criteria") if isinstance(question["q"].get("criteria"), dict) else {i: str(c) for i, c in enumerate(question["q"].get("criteria") or [])}
+        criteria = {str(k): str(v) for k, v in (criteria or {}).items()}
+        shortlist_k = None
+    else:
+        qtype = "choice"
+        ids = [dsvc.to_label_id(n) for n in names]
+        label_map = {n: dsvc.to_label_id(n) for n in names}
+        state_cols = text_col
+        criteria = {lid: lid.replace("_", " ") for lid in ids}
+        if req.criteria:
+            criteria.update({dsvc.to_label_id(k): v for k, v in req.criteria.items() if dsvc.to_label_id(k) in criteria})
+        elif req.use_ai_criteria and get_openrouter_key():
+            yield {"type": "status", "message": f"writing criteria for {len(ids)} labels with {get_openrouter_model()}"}
+            try:
+                criteria = await openrouter.describe_labels(name, ids)
+            except Exception as e:
+                yield {"type": "status", "message": f"AI criteria failed ({e}); using label names"}
+        question = {"q": {"type": "choice", "instructions": req.question_instructions or "Which category does this text belong to?", "criteria": criteria}}
+        shortlist_k = req.shortlist_k if req.shortlist_k and req.shortlist_k < len(ids) else None
+
     engine = req.engine.model_dump() if req.engine else get_decision_engine()
-    shortlist_k = req.shortlist_k if engine.get("kind") == "laya" and req.shortlist_k and req.shortlist_k < len(ids) else None
+    if engine.get("kind") != "laya":
+        shortlist_k = None
 
     if req.offset >= len(ds):
         raise HTTPException(400, f"offset beyond dataset size ({len(ds)})")
@@ -316,42 +369,68 @@ async def _evaluate_events(req: EvaluateRequest):
     n_total = len(subset)
     src = req.source or DatasetSource(kind="preset", dataset_id=req.dataset_id)
     if src.kind != "preset":
-        library.remember({**src.model_dump(), "text_column": text_col, "label_column": label_col, "split": req.split if src.kind == "hf" else None},
-                         name=name, size=len(ds), labels=len(ids))
-    yield {"type": "start", "n": n_total, "labels": ids, "criteria": criteria, "engine": engine}
+        library.remember({**src.model_dump(), "text_column": (text_col if isinstance(state_cols, str) else "__all__"), "label_column": label_col,
+                          "split": req.split if src.kind == "hf" else None}, name=name, size=len(ds), labels=len(names))
+    yield {"type": "start", "n": n_total, "labels": ids, "criteria": criteria, "engine": engine, "question_type": qtype}
+
+    def make_state(ex: dict[str, Any]) -> tuple[Any, str]:
+        if isinstance(state_cols, list):
+            st = {k: ex[k] for k in state_cols if k in ex}
+            return st, json.dumps(st, ensure_ascii=False, default=str)
+        if state_cols == "__all__":
+            st = {k: v for k, v in ex.items() if k != label_col}
+            return st, json.dumps(st, ensure_ascii=False, default=str)
+        t = str(ex[state_cols])
+        return t, t
 
     rows: list[EvaluateRow] = []
     routing = None
     per = defaultdict(lambda: {"n": 0, "correct": 0})
     correct = 0
+    abs_err = 0.0
     t0 = time.perf_counter()
     for i, ex in enumerate(subset):
-        if text_col == "__all__":
-            state: Any = {k: v for k, v in ex.items() if k != label_col}
-            text = json.dumps(state, ensure_ascii=False, default=str)
-        else:
-            state = text = str(ex[text_col])
-        gold_raw = ex[label_col]
-        gold = ids[int(gold_raw)] if is_int_label and str(gold_raw).lstrip("-").isdigit() and int(gold_raw) < len(ids) else dsvc.to_label_id(str(gold_raw))
+        state, text = make_state(ex)
+        gv = gold_value(ex[label_col])
+        mapped = label_map.get(gv, label_map.get(dsvc.to_label_id(gv), gv))
         try:
             res = await laya_service.decide(state, question, engine, shortlist_k)
         except Exception as e:
             raise HTTPException(500, f"decision error on sample {i + 1}: {e}")
         routing = routing or res.get("routing")
-        pred, conf = laya_service.extract_choice(res, "label")
-        ok = pred == gold
+        ans = (res.get("answers") or {}).get("q", {})
+        raw: float | None = None
+        if qtype == "choice":
+            pred, conf = laya_service.extract_choice(res, "q")
+            gold = str(mapped)
+            ok = pred == gold
+        elif qtype == "score":
+            raw = float(ans.get("score") or 0)
+            pred = str(int(round(raw)))
+            gold = str(int(mapped)) if str(mapped).lstrip("-").isdigit() else str(mapped)
+            conf = ans.get("confidence")
+            ok = pred == gold
+            if gold.lstrip("-").isdigit():
+                abs_err += abs(raw - int(gold))
+        else:
+            raw = float(ans.get("noul") or 0)
+            pred = "yes" if raw >= 0.5 else "no"
+            gold = "yes" if (mapped is True or str(mapped).lower() in ("true", "yes", "1")) else "no"
+            conf = max(raw, 1 - raw)
+            ok = pred == gold
         correct += int(ok)
         per[gold]["n"] += 1
         per[gold]["correct"] += int(ok)
-        row = EvaluateRow(text=text, gold=gold, pred=pred, confidence=conf, correct=ok)
+        row = EvaluateRow(text=text, gold=gold, pred=pred, confidence=conf, correct=ok, raw=raw)
         rows.append(row)
         elapsed = time.perf_counter() - t0
         yield {"type": "row", "i": i + 1, "n": n_total, "row": row.model_dump(), "accuracy": correct / (i + 1),
                "elapsed": round(elapsed, 1), "eta": round(elapsed / (i + 1) * (n_total - i - 1), 1)}
 
     n = len(rows)
+    extra = {"mae": abs_err / n} if qtype == "score" and n else {}
     result = EvaluateResponse(
-        dataset_id=name, shortlist_k=shortlist_k, n=n, accuracy=(correct / n if n else 0.0), labels=ids, criteria=criteria,
+        dataset_id=name, question_type=qtype, extra_metrics=extra, shortlist_k=shortlist_k, n=n, accuracy=(correct / n if n else 0.0), labels=ids, criteria=criteria,
         routing=routing, rows=rows, per_label={k: {"n": v["n"], "accuracy": v["correct"] / v["n"]} for k, v in per.items()},
     )
     yield {"type": "done", "result": result.model_dump()}

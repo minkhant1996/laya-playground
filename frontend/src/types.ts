@@ -41,9 +41,12 @@ export interface EvalRow {
   pred: string
   confidence: number | null
   correct: boolean
+  raw?: number | null
 }
 
 export interface EvalResult {
+  question_type?: 'choice' | 'score' | 'noul'
+  extra_metrics?: Record<string, number>
   shortlist_k?: number | null
   dataset_id: string
   n: number
@@ -194,4 +197,19 @@ export interface LibraryEntry extends DatasetSource {
   labels: number | null
   last_used: number
   split?: string | null
+}
+
+export interface EvalPlan {
+  state_columns: string[] | string | null
+  label_column: string | null
+  question: Question
+  label_map: Record<string, string | number | boolean>
+}
+
+export interface PlanResult extends EvalPlan {
+  dataset: string
+  columns: string[]
+  size: number
+  label_values: string[]
+  rationale: string
 }

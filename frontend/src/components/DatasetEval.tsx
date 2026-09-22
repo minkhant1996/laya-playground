@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import EnginePicker from './EnginePicker'
 import EvalTable from './EvalTable'
+import PlanEditor from './PlanEditor'
 import { api } from '../api'
-import type { DatasetInfo, DatasetSource, Engine, EvalResult, EvalRow, InspectResult, KaggleInspect, LibraryEntry, UploadResult } from '../types'
+import type { DatasetInfo, DatasetSource, Engine, EvalResult, EvalRow, EvalPlan, InspectResult, KaggleInspect, LibraryEntry, PlanResult, UploadResult } from '../types'
 
 type Mode = 'preset' | 'hf' | 'upload' | 'kaggle' | 'saved'
 
@@ -16,6 +17,11 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
   const [hfConfig, setHfConfig] = useState('')
   const [inspect, setInspect] = useState<InspectResult | null>(null)
   const [inspecting, setInspecting] = useState(false)
+
+  // agent plan
+  const [plan, setPlan] = useState<PlanResult | null>(null)
+  const [planning, setPlanning] = useState(false)
+  const [usePlan, setUsePlan] = useState(true)
 
   // saved library
   const [lib, setLib] = useState<LibraryEntry[]>([])
@@ -132,6 +138,25 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
     return { kind: 'upload', upload_id: upload.upload_id, text_column: textCol, label_column: labelCol }
   }
 
+  async function makePlan() {
+    const source = buildSource()
+    if (!source) {
+      setError('Load or pick a dataset first.')
+      return
+    }
+    setError('')
+    setPlanning(true)
+    try {
+      setPlan(await api.plan(source, split))
+      setUsePlan(true)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setPlanning(false)
+    }
+  }
+  const updatePlan = (p: EvalPlan) => setPlan(plan ? { ...plan, ...p } : plan)
+
   async function run() {
     const source = buildSource()
     if (!source) {
@@ -148,7 +173,16 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
     abortRef.current = ac
     try {
       await api.evaluateStream(
-        { source, split, limit, offset, use_ai_criteria: useAi && aiEnabled, shortlist_k: shortlist > 1 ? shortlist : null, engine },
+        {
+          source,
+          split,
+          limit,
+          offset,
+          use_ai_criteria: useAi && aiEnabled,
+          shortlist_k: shortlist > 1 ? shortlist : null,
+          engine,
+          plan: usePlan && plan ? { state_columns: plan.state_columns, label_column: plan.label_column, question: plan.question, label_map: plan.label_map } : undefined,
+        },
         (ev) => {
           if (ev.type === 'status') setStatus(ev.message)
           else if (ev.type === 'start') {
@@ -174,6 +208,10 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
       abortRef.current = null
     }
   }
+
+  useEffect(() => {
+    setPlan(null)
+  }, [mode, datasetId, inspect, upload, kg, saved])
 
   const current = datasets.find((d) => d.id === datasetId)
   const columns = mode === 'hf' ? inspect?.columns : mode === 'upload' ? upload?.columns : mode === 'kaggle' ? kg?.columns : mode === 'saved' && saved ? [...new Set([saved.text_column, saved.label_column].filter((c): c is string => !!c && c !== '__all__'))] : undefined
@@ -364,6 +402,19 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
         )}
 
         <div className="row">
+          <button className="ghost" disabled={planning || !aiEnabled} onClick={makePlan} title="Ask the text model to propose state columns, question type, criteria and label mapping">
+            {planning ? 'Preparing…' : plan ? '↻ Re-prepare with AI' : '✨ Prepare with AI'}
+          </button>
+          {plan && (
+            <label>
+              <input type="checkbox" checked={usePlan} onChange={(e) => setUsePlan(e.target.checked)} style={{ width: 'auto', marginRight: 6 }} />
+              use plan ({plan.question.type})
+            </label>
+          )}
+          {!aiEnabled && <span className="small">Add an OpenRouter key to use the AI preparer.</span>}
+        </div>
+        {plan && usePlan && <PlanEditor plan={plan} onChange={updatePlan} />}
+        <div className="row">
           {mode !== 'upload' && mode !== 'kaggle' && mode !== 'saved' && (
             <>
               <label>split</label>
@@ -374,12 +425,14 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
           <input type="number" min={1} max={1000} value={limit} onChange={(e) => setLimit(+e.target.value)} style={{ width: 90 }} />
           <label>offset</label>
           <input type="number" min={0} value={offset} onChange={(e) => setOffset(+e.target.value)} style={{ width: 90 }} />
-          <label title="For many-label sets: embed-rank labels and ask Laya only over the top-k. 0 = off.">shortlist k</label>
-          <input type="number" min={0} max={64} value={shortlist} onChange={(e) => setShortlist(+e.target.value)} style={{ width: 80 }} />
-          <label>
-            <input type="checkbox" checked={useAi} disabled={!aiEnabled} onChange={(e) => setUseAi(e.target.checked)} style={{ width: 'auto', marginRight: 6 }} />
-            AI-written label criteria
-          </label>
+          {!(plan && usePlan) && <label title="For many-label sets: embed-rank labels and ask Laya only over the top-k. 0 = off.">shortlist k</label>}
+          {!(plan && usePlan) && <input type="number" min={0} max={64} value={shortlist} onChange={(e) => setShortlist(+e.target.value)} style={{ width: 80 }} />}
+          {!(plan && usePlan) && (
+            <label>
+              <input type="checkbox" checked={useAi} disabled={!aiEnabled} onChange={(e) => setUseAi(e.target.checked)} style={{ width: 'auto', marginRight: 6 }} />
+              AI-written label criteria
+            </label>
+          )}
           <button className="primary" disabled={busy} onClick={run}>
             {busy ? 'Evaluating…' : 'Evaluate'}
           </button>
@@ -446,6 +499,15 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
               <div className="k">samples</div>
               <div className="v">{result.n}</div>
             </div>
+            {result.question_type && result.question_type !== 'choice' && (
+              <div className="metric">
+                <div className="k">question</div>
+                <div className="v" style={{ fontSize: 15 }}>
+                  {result.question_type}
+                  {result.extra_metrics?.mae !== undefined ? <span className="small"> · MAE {result.extra_metrics.mae.toFixed(2)}</span> : null}
+                </div>
+              </div>
+            )}
             <div className="metric">
               <div className="k">labels</div>
               <div className="v">
