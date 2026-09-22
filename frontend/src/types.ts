@@ -269,3 +269,14 @@ export interface EvalHistoryFull extends EvalHistoryEntry {
   label_a: string | null
   label_b: string | null
 }
+
+export interface SystemInfo {
+  process: { rss_mb: number; cpu_percent: number }
+  ram: { total_mb: number; used_mb: number; percent: number }
+  cpu_percent: number
+  gpus: { index: number; name: string; total_mb: number; used_mb: number; process_mb: number | null }[]
+  laya_loaded: boolean
+  laya_device: string
+  os: string
+  note: string | null
+}

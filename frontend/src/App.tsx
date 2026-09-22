@@ -6,6 +6,7 @@ import DatasetEval from './components/DatasetEval'
 import Settings from './components/Settings'
 import Usage from './components/Usage'
 import Learn from './components/Learn'
+import SystemStats from './components/SystemStats'
 
 type Tab = 'playground' | 'datasets' | 'learn' | 'settings' | 'usage'
 
@@ -29,6 +30,7 @@ export default function App() {
           {health
             ? `backend ok · text model: ${health.openrouter_configured ? health.openrouter_model : 'OpenRouter not configured'} · decisions: ${engine.kind === 'laya' ? 'Laya (local)' : engine.model}`
             : 'backend offline'}
+          {health && <SystemStats compact />}
         </span>
       </header>
       <nav className="tabs">

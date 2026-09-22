@@ -784,6 +784,14 @@ async def learn_sessions_delete_all():
     return {"ok": True, "deleted": sessions.delete_all(kind="learn")}
 
 
+@app.get("/api/system")
+async def system_info():
+    """RAM / VRAM / CPU usage of the backend process and the machine."""
+    from . import sysinfo
+
+    return await asyncio.to_thread(sysinfo.snapshot)
+
+
 @app.get("/api/usage")
 async def get_usage(limit: int = 200, days: int | None = None):
     since = time.time() - days * 86400 if days else None

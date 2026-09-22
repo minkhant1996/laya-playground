@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { UsageBucket, UsageSummary } from '../types'
 import { useConfirm } from './ConfirmDialog'
+import SystemStats from './SystemStats'
 
 const usd = (v: number) => (v ? `$${v.toFixed(v < 0.01 ? 5 : 4)}` : '$0')
 const ms = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(2)} s` : `${v.toFixed(0)} ms`)
@@ -111,6 +112,7 @@ export default function Usage() {
         )}
         <div className="small">Cost uses OpenRouter's listed prices per model. Laya (local) is free; Jev cost is not estimated (tokens are still counted).</div>
       </section>
+      <SystemStats />
       {data && (
         <>
           <section className="panel" style={{ marginTop: 16 }}>

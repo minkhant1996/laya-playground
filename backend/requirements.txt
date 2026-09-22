@@ -8,3 +8,4 @@ pydantic-settings
 cryptography
 python-multipart
 kagglehub
+psutil

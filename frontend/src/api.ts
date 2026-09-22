@@ -1,4 +1,4 @@
-import type { EvalHistoryEntry, EvalHistoryFull, I18nStatus, ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, LearnDoc, LearnMsg, LearnSource, LibraryEntry, ORModel, PlanResult, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
+import type { SystemInfo, EvalHistoryEntry, EvalHistoryFull, I18nStatus, ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, LearnDoc, LearnMsg, LearnSource, LibraryEntry, ORModel, PlanResult, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`/api${path}`, {
@@ -53,6 +53,7 @@ export const api = {
   session: (id: string) => req<ChatSession>(`/chat/sessions/${id}`),
   deleteSession: (id: string) => req<{ ok: boolean }>(`/chat/sessions/${id}`, { method: 'DELETE' }),
   deleteAllSessions: () => req<{ ok: boolean; deleted: number }>('/chat/sessions', { method: 'DELETE' }),
+  system: () => req<SystemInfo>('/system'),
   usage: (days?: number) => req<UsageSummary>(`/usage?limit=300${days ? `&days=${days}` : ''}`),
   clearUsage: () => req<{ ok: boolean }>('/usage', { method: 'DELETE' }),
   skill: () => req<{ sources: string[]; guide: string }>('/skill'),
