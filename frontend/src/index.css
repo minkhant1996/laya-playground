@@ -132,3 +132,12 @@ table.aligned th:not(:first-child), table.aligned td:not(:first-child) { text-al
 .langpick > button { margin: 0; }
 .scroll { overflow: auto; max-height: 360px; }
 .scroll thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.evalwrap { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.evalwrap.min { grid-template-columns: minmax(0, 1fr) 56px; }
+@media (max-width: 900px) { .evalwrap, .evalwrap.min { grid-template-columns: 1fr; } }
+.histbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.histbar h2 { margin: 0; }
+.iconbtn { background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 8px; width: 34px; height: 34px; cursor: pointer; font-size: 16px; line-height: 1; }
+.iconbtn:hover { border-color: var(--accent); }
+.hist-min { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 6px; }
+.hist-min .count { font-size: 11px; color: var(--muted); writing-mode: vertical-rl; transform: rotate(180deg); }
