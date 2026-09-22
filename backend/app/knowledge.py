@@ -50,10 +50,9 @@ def _allowed(file: str) -> bool:
 def read(file: str) -> str:
     if not _allowed(file):
         raise ValueError(f"'{file}' is not in the knowledge hub")
-    text = (HUB / file).read_text(encoding="utf-8", errors="ignore")
-    text = re.sub(r"^<!-- source: .*? -->\n+", "", text)
-    text = re.sub(r"^> ## Documentation Index\n(> .*\n)+", "", text, flags=re.M)
-    return text[:MAX_CHARS_PER_FILE]
+    from .mdx_clean import clean
+
+    return clean((HUB / file).read_text(encoding="utf-8", errors="ignore"))[:MAX_CHARS_PER_FILE]
 
 
 def _keyword_fallback(question: str) -> list[str]:

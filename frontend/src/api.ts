@@ -1,4 +1,4 @@
-import type { ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, LearnDoc, LearnSource, LibraryEntry, ORModel, PlanResult, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
+import type { ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, LearnDoc, LearnMsg, LearnSource, LibraryEntry, ORModel, PlanResult, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`/api${path}`, {
@@ -93,13 +93,13 @@ export const api = {
   plan: (source: DatasetSource, split: string) => req<PlanResult>('/datasets/plan', { method: 'POST', body: JSON.stringify({ source, split }) }),
   learnDocs: () => req<LearnDoc[]>('/learn/docs'),
   learnDoc: (file: string) => req<{ file: string; content: string }>(`/learn/docs/${file}`),
-  learnAsk: async (question: string, history: { role: 'user' | 'assistant'; content: string }[], onStatus: (stage: string, message: string) => void, language?: string) => {
-    const r = await fetch('/api/learn/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, history, language }) })
+  learnAsk: async (question: string, history: { role: 'user' | 'assistant'; content: string }[], onStatus: (stage: string, message: string) => void, language?: string, session_id?: string | null) => {
+    const r = await fetch('/api/learn/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, history, language, session_id }) })
     if (!r.ok || !r.body) throw new Error((await r.json().catch(() => ({}))).detail ?? r.statusText)
     const reader = r.body.getReader()
     const dec = new TextDecoder()
     let buf = ''
-    let done: { answer: string; sources: LearnSource[] } | null = null
+    let done: { answer: string; sources: LearnSource[]; session_id: string; title: string } | null = null
     for (;;) {
       const { value, done: end } = await reader.read()
       if (end) break
@@ -118,6 +118,10 @@ export const api = {
     if (!done) throw new Error('stream ended without an answer')
     return done
   },
+  learnSessions: () => req<ChatSessionSummary[]>('/learn/sessions'),
+  learnSession: (id: string) => req<{ id: string; title: string; messages: LearnMsg[] }>(`/learn/sessions/${id}`),
+  deleteLearnSession: (id: string) => req<{ ok: boolean }>(`/learn/sessions/${id}`, { method: 'DELETE' }),
+  deleteAllLearnSessions: () => req<{ ok: boolean; deleted: number }>('/learn/sessions', { method: 'DELETE' }),
   library: () => req<LibraryEntry[]>('/datasets/library'),
   deleteLibrary: (id: string) => req<{ ok: boolean }>(`/datasets/library/${id}`, { method: 'DELETE' }),
   inspect: (ref: string) => req<InspectResult>('/datasets/inspect', { method: 'POST', body: JSON.stringify({ ref }) }),

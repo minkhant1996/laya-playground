@@ -540,7 +540,8 @@ async def delete_kaggle():
 # ---------------------------------------------------------------- Learn (knowledge hub agent)
 class LearnRequest(BaseModel):
     question: str = PField(min_length=1, max_length=4000)
-    history: list[ChatMessage] = []
+    history: list[ChatMessage] = []          # used only when no session_id is given
+    session_id: str | None = None
     language: str | None = PField(default=None, max_length=40, pattern=r"^[A-Za-z \-()']*$")
 
 
@@ -569,14 +570,69 @@ async def learn_ask(req: LearnRequest):
     if not get_openrouter_key():
         raise HTTPException(400, "OpenRouter key needed (Settings)")
 
+    from . import sessions
+
+    sess = None
+    if req.session_id:
+        try:
+            sess = sessions.get(req.session_id)
+        except (FileNotFoundError, ValueError):
+            sess = None
+    if sess is None:
+        sess = sessions.create(None, kind="learn")
+    history = [{"role": m["role"], "content": m["content"]} for m in sess["messages"]] or [m.model_dump() for m in req.history]
+
     async def gen():
         try:
-            async for ev in knowledge.ask(req.question, [m.model_dump() for m in req.history], req.language):
+            async for ev in knowledge.ask(req.question, history, req.language):
+                if ev["type"] == "done":
+                    s2 = sessions.append(sess["id"], [
+                        {"role": "user", "content": req.question, "ts": time.time()},
+                        {"role": "assistant", "content": ev["answer"], "sources": ev.get("sources"), "ts": time.time()},
+                    ])
+                    ev = {**ev, "session_id": s2["id"], "title": s2["title"]}
                 yield json.dumps(ev, ensure_ascii=False) + "\n"
         except Exception as e:
             yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
     return StreamingResponse(gen(), media_type="application/x-ndjson", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/learn/sessions")
+async def learn_sessions():
+    from . import sessions
+
+    return sessions.list_all(kind="learn")
+
+
+@app.get("/api/learn/sessions/{sid}")
+async def learn_session_get(sid: str):
+    from . import sessions
+
+    try:
+        s = sessions.get(sid)
+    except (FileNotFoundError, ValueError) as e:
+        raise HTTPException(404, str(e))
+    if s.get("kind") != "learn":
+        raise HTTPException(404, "not a learn session")
+    return s
+
+
+@app.delete("/api/learn/sessions/{sid}")
+async def learn_session_delete(sid: str):
+    from . import sessions
+
+    try:
+        return {"ok": sessions.delete(sid)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/learn/sessions")
+async def learn_sessions_delete_all():
+    from . import sessions
+
+    return {"ok": True, "deleted": sessions.delete_all(kind="learn")}
 
 
 @app.get("/api/usage")

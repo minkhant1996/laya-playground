@@ -1,7 +1,7 @@
 import { marked } from 'marked'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
-import type { LearnDoc, LearnMsg } from '../types'
+import type { ChatSessionSummary, LearnDoc, LearnMsg } from '../types'
 import LangPicker from './LangPicker'
 
 const STARTERS = [
@@ -20,6 +20,8 @@ function md(text: string) {
 export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; textModel: string }) {
   const [docs, setDocs] = useState<LearnDoc[]>([])
   const [msgs, setMsgs] = useState<LearnMsg[]>([])
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([])
+  const [sessionId, setSessionId] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [stage, setStage] = useState<{ stage: string; message: string } | null>(null)
@@ -35,9 +37,31 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
   })
   const bottom = useRef<HTMLDivElement>(null)
 
+  const loadSessions = () => api.learnSessions().then(setSessions).catch(() => setSessions([]))
   useEffect(() => {
     api.learnDocs().then(setDocs).catch(() => setDocs([]))
+    loadSessions()
   }, [])
+  async function openSession(id: string) {
+    try {
+      const s = await api.learnSession(id)
+      setSessionId(s.id)
+      setMsgs(s.messages)
+      setError('')
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+  function newSession() {
+    setSessionId(null)
+    setMsgs([])
+    setError('')
+  }
+  async function removeSession(id: string) {
+    await api.deleteLearnSession(id)
+    if (id === sessionId) newSession()
+    loadSessions()
+  }
   useEffect(() => {
     if (!viewing) return
     const h = (e: KeyboardEvent) => e.key === 'Escape' && setViewing(null)
@@ -58,8 +82,10 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
     setBusy(true)
     setStage({ stage: 'selecting', message: 'starting…' })
     try {
-      const r = await api.learnAsk(q, msgs.map((m) => ({ role: m.role, content: m.content })), (stg, message) => setStage({ stage: stg, message }), lang === 'Auto' ? undefined : lang)
+      const r = await api.learnAsk(q, msgs.map((m) => ({ role: m.role, content: m.content })), (stg, message) => setStage({ stage: stg, message }), lang === 'Auto' ? undefined : lang, sessionId)
+      setSessionId(r.session_id)
       setMsgs([...next, { role: 'assistant', content: r.answer, sources: r.sources }])
+      loadSessions()
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -78,10 +104,46 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
 
   return (
     <div className="chatwrap" style={{ gridTemplateColumns: '260px 1fr' }}>
+      <div>
       <section className="panel">
+        <h2>Sessions</h2>
+        <button className="ghost" style={{ width: '100%', marginBottom: 8 }} onClick={newSession} disabled={busy}>
+          + New session
+        </button>
+        <div className="sessions" style={{ maxHeight: 220 }}>
+          {sessions.length === 0 && <div className="small">No saved sessions yet.</div>}
+          {sessions.map((s) => (
+            <div key={s.id} className={`session ${s.id === sessionId ? 'on' : ''}`} onClick={() => openSession(s.id)} title={`${s.title} · ${new Date(s.updated * 1000).toLocaleString()}`}>
+              <span>{s.title}</span>
+              <small>{Math.floor(s.count / 2)}</small>
+              <button
+                title="Delete this session"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeSession(s.id)
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        {sessions.length > 1 && (
+          <button
+            className="chip"
+            style={{ marginTop: 8 }}
+            onClick={() => {
+              if (confirm('Delete all Learn sessions?')) api.deleteAllLearnSessions().then(() => (newSession(), loadSessions()))
+            }}
+          >
+            Delete all
+          </button>
+        )}
+      </section>
+      <section className="panel" style={{ marginTop: 16 }}>
         <h2>Knowledge hub ({docs.length})</h2>
         <div className="small" style={{ marginBottom: 8 }}>The assistant may read only these files (backend/knowledge-hub). Click to view, or open the source link.</div>
-        <div className="sessions" style={{ maxHeight: '65vh' }}>
+        <div className="sessions" style={{ maxHeight: '40vh' }}>
           {docs.map((d) => (
             <div key={d.file} className={`session ${viewing?.file === d.file ? 'on' : ''}`} onClick={() => open(d.file)} title={d.summary}>
               <span>{d.title}</span>
@@ -92,11 +154,12 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
           ))}
         </div>
       </section>
+      </div>
 
       <div>
         <section className="panel">
           <h2 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span>Learn about System One · Jev · Laya</span>
+            <span>Learn about System One · Jev · Laya{sessionId ? '' : ' · new session'}</span>
             <span style={{ textTransform: 'none', letterSpacing: 0, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
               answer in
               <LangPicker
@@ -177,11 +240,7 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
             <button className="primary" disabled={!aiEnabled || busy || !input.trim()} onClick={() => ask(input)}>
               Ask
             </button>
-            {msgs.length > 0 && (
-              <button className="ghost" onClick={() => setMsgs([])} disabled={busy}>
-                Clear
-              </button>
-            )}
+
           </div>
           {error && <div className="error">{error}</div>}
         </section>

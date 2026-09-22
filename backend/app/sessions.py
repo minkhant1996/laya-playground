@@ -18,10 +18,10 @@ def _path(sid: str) -> Path:
     return DIR / f"{sid}.json"
 
 
-def create(engine: dict[str, Any] | None = None) -> dict[str, Any]:
+def create(engine: dict[str, Any] | None = None, kind: str = "chat") -> dict[str, Any]:
     DIR.mkdir(parents=True, exist_ok=True)
     now = time.time()
-    s = {"id": uuid.uuid4().hex[:12], "title": "New chat", "created": now, "updated": now, "engine": engine, "messages": []}
+    s = {"id": uuid.uuid4().hex[:12], "kind": kind, "title": "New chat", "created": now, "updated": now, "engine": engine, "messages": []}
     _path(s["id"]).write_text(json.dumps(s))
     return s
 
@@ -51,14 +51,16 @@ def append(sid: str, messages: list[dict[str, Any]], engine: dict[str, Any] | No
     return s
 
 
-def list_all() -> list[dict[str, Any]]:
+def list_all(kind: str = "chat") -> list[dict[str, Any]]:
     if not DIR.exists():
         return []
     out = []
     for p in DIR.glob("*.json"):
         try:
             s = json.loads(p.read_text())
-            out.append({"id": s["id"], "title": s["title"], "created": s["created"], "updated": s["updated"], "count": len(s["messages"]), "engine": s.get("engine")})
+            if s.get("kind", "chat") != kind:
+                continue
+            out.append({"id": s["id"], "kind": kind, "title": s["title"], "created": s["created"], "updated": s["updated"], "count": len(s["messages"]), "engine": s.get("engine")})
         except Exception:
             continue
     return sorted(out, key=lambda s: -s["updated"])
@@ -72,9 +74,14 @@ def delete(sid: str) -> bool:
     return False
 
 
-def delete_all() -> int:
+def delete_all(kind: str = "chat") -> int:
     n = 0
-    for p in DIR.glob("*.json") if DIR.exists() else []:
+    for p in list(DIR.glob("*.json")) if DIR.exists() else []:
+        try:
+            if json.loads(p.read_text()).get("kind", "chat") != kind:
+                continue
+        except Exception:
+            pass
         p.unlink()
         n += 1
     return n
