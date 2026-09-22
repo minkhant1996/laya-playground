@@ -58,7 +58,10 @@ def _components(md: str) -> str:
     md = re.sub(r"<ResponseField\s+name=\"([^\"]*)\"\s+type=\"([^\"]*)\"([^>]*?)/?>", _field, md)
     md = re.sub(r"<Expandable\s+title=\"([^\"]*)\"[^>]*>", r"\n_\1:_\n", md)
     md = re.sub(r"<(ScoreExplorer|ConfidenceExplorer|NoulExplorer|ChoiceExplorer)[^>]*?/?>(?:.*?</\1>)?", "> _[interactive explorer — open the source page to try it]_", md, flags=re.S)
-    md = re.sub(r"<Frame[^>]*>\s*<img[^>]*src=\"([^\"]*)\"[^>]*>\s*</Frame>", r"![image](\1)", md, flags=re.S)
+    # paired light/dark images: keep the dark one (the app is dark), drop the light one
+    md = re.sub(r"<img[^>]*className=\"block dark:hidden\"[^>]*/?>\s*", "", md)
+    md = re.sub(r"<img[^>]*?src=\"([^\"]*)\"[^>]*?(?:alt=\"([^\"]*)\")?[^>]*/?>", lambda m: f"![{m.group(2) or 'image'}]({m.group(1)})", md)
+    md = re.sub(r"<Frame(?:\s+caption=\"([^\"]*)\")?[^>]*>(.*?)</Frame>", lambda m: "\n" + re.sub(r"^[ \t]+", "", m.group(2).strip(), flags=re.M) + (f"\n\n_{m.group(1)}_" if m.group(1) else "") + "\n", md, flags=re.S)
     # any remaining capitalised JSX tags (Tabs, Columns, Steps, Frame, AccordionGroup, ...): drop the tag, keep the content
     md = re.sub(r"</?[A-Z][A-Za-z]*(?:\s[^<>]*?)?/?>", "", md)
     return md
@@ -74,5 +77,7 @@ def clean(md: str) -> str:
     md = _fences(md)
     md = _components(md)
     md = re.sub(r"\{/\*.*?\*/\}", "", md, flags=re.S)       # {/* mdx comments */}
+    # de-indent lines that only look like code because MDX components were indented
+    md = re.sub(r"^ {2,}(?=!\[|\*\*|[A-Za-z])", "", md, flags=re.M)
     md = re.sub(r"\n{3,}", "\n\n", md)
     return md.strip()
