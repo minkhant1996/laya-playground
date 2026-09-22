@@ -237,3 +237,13 @@ export interface LearnMsg {
   content: string
   sources?: LearnSource[]
 }
+
+export interface I18nStatus {
+  running: boolean
+  done: number
+  total: number
+  current: string | null
+  errors: number
+  have: { learn: number; chat: number }
+  languages: number
+}

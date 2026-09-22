@@ -70,7 +70,8 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
   }
   useEffect(() => {
     let alive = true
-    setUiLoading(true)
+    setUi(DEFAULT_UI)
+    setUiLoading(lang !== 'Auto' && lang !== 'English')
     api
       .learnI18n(lang)
       .then((r) => {
@@ -200,6 +201,7 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
             {msgs.length === 0 && (
               <div className="msg assistant">
                 <p style={{ opacity: uiLoading ? 0.6 : 1 }}>{ui.intro}</p>
+                {uiLoading && <div className="small"><span className="step on">translating to {lang}…</span> first time only, then cached</div>}
                 <div className="suggest" style={{ opacity: uiLoading ? 0.6 : 1 }}>
                   {ui.starters.map((s) => (
                     <button key={s} className="chip" onClick={() => ask(s)} disabled={!aiEnabled}>

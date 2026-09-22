@@ -647,6 +647,24 @@ async def learn_i18n(lang: str = "Auto", scope: str = "learn"):
     return await i18n.strings(lang, "chat" if scope == "chat" else "learn")
 
 
+@app.post("/api/learn/i18n/warm")
+async def learn_i18n_warm():
+    """Start pre-translating the UI strings for every language in the picker (background)."""
+    from . import i18n
+
+    if not get_openrouter_key():
+        raise HTTPException(400, "OpenRouter key needed (Settings)")
+    asyncio.create_task(i18n.warm_all())
+    return i18n.warm_status()
+
+
+@app.get("/api/learn/i18n/status")
+async def learn_i18n_status():
+    from . import i18n
+
+    return i18n.warm_status()
+
+
 @app.get("/api/learn/sessions")
 async def learn_sessions():
     from . import sessions

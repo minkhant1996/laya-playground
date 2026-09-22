@@ -146,3 +146,36 @@ async def strings(lang: str | None, scope: str = "learn") -> dict[str, Any]:
         FILE.parent.mkdir(parents=True, exist_ok=True)
         FILE.write_text(json.dumps(allc, ensure_ascii=False, indent=1))
     return {"lang": lang, "cached": False, **data}
+
+
+# ---------------------------------------------------------------- pre-translate everything (background)
+import asyncio
+
+ALL_LANGUAGES: list[str] = ['Auto', 'English', 'Burmese', 'Thai', 'Chinese (Simplified)', 'Chinese (Traditional)', 'Japanese', 'Korean', 'Vietnamese', 'Indonesian', 'Malay', 'Filipino', 'Khmer', 'Lao', 'Shan', 'Mon', 'Karen (S\\', 'Hindi', 'Bengali', 'Urdu', 'Punjabi', 'Gujarati', 'Marathi', 'Tamil', 'Telugu', 'Kannada', 'Malayalam', 'Sinhala', 'Nepali', 'Tibetan', 'Mongolian', 'Arabic', 'Persian', 'Hebrew', 'Turkish', 'Kurdish', 'Azerbaijani', 'Kazakh', 'Uzbek', 'Georgian', 'Armenian', 'Russian', 'Ukrainian', 'Polish', 'Czech', 'Slovak', 'Hungarian', 'Romanian', 'Bulgarian', 'Serbian', 'Croatian', 'Bosnian', 'Slovenian', 'Macedonian', 'Albanian', 'Greek', 'Lithuanian', 'Latvian', 'Estonian', 'Finnish', 'Swedish', 'Norwegian', 'Danish', 'Icelandic', 'German', 'Dutch', 'French', 'Spanish', 'Catalan', 'Portuguese (Brazil)', 'Portuguese (Portugal)', 'Italian', 'Irish', 'Welsh', 'Swahili', 'Amharic', 'Hausa', 'Yoruba', 'Igbo', 'Zulu', 'Xhosa', 'Afrikaans', 'Somali', 'Malagasy', 'Haitian Creole', 'Esperanto', 'Latin']
+
+_warm: dict[str, Any] = {"running": False, "done": 0, "total": 0, "current": None, "errors": 0}
+
+
+def warm_status() -> dict[str, Any]:
+    cached = _cache_all()
+    have = {sc: len(cached.get(sc, {})) + len(b) for sc, b in (("learn", BUILTIN), ("chat", CHAT_BUILTIN))}
+    return {**_warm, "have": have, "languages": len(ALL_LANGUAGES)}
+
+
+async def warm_all() -> None:
+    """Translate UI strings for every language in both scopes, skipping what is cached. One call each."""
+    if _warm["running"]:
+        return
+    todo = [(sc, l) for sc in ("learn", "chat") for l in ALL_LANGUAGES
+            if l not in (BUILTIN if sc == "learn" else CHAT_BUILTIN) and l not in _cache(sc)]
+    _warm.update(running=True, done=0, total=len(todo), errors=0)
+    try:
+        for sc, l in todo:
+            _warm["current"] = f"{sc}:{l}"
+            r = await strings(l, sc)
+            if r.get("fallback"):
+                _warm["errors"] += 1
+            _warm["done"] += 1
+            await asyncio.sleep(0.2)
+    finally:
+        _warm.update(running=False, current=None)

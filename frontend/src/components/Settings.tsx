@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, settingsApi, type SettingsInfo } from '../api'
-import type { Engine } from '../types'
+import type { Engine, I18nStatus } from '../types'
 import EnginePicker from './EnginePicker'
 import ModelPicker from './ModelPicker'
 
@@ -17,6 +17,7 @@ export default function Settings({ onChange }: { onChange: () => void }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
   const [skill, setSkill] = useState<{ sources: string[]; guide: string } | null>(null)
+  const [i18n, setI18n] = useState<I18nStatus | null>(null)
 
   async function refresh() {
     const i = await settingsApi.get()
@@ -27,6 +28,9 @@ export default function Settings({ onChange }: { onChange: () => void }) {
   useEffect(() => {
     refresh().catch(() => setInfo(null))
     api.skill().then(setSkill).catch(() => setSkill(null))
+    api.i18nStatus().then(setI18n).catch(() => setI18n(null))
+    const t = setInterval(() => api.i18nStatus().then(setI18n).catch(() => undefined), 3000)
+    return () => clearInterval(t)
   }, [])
 
   const wrap = (name: string, fn: () => Promise<string>) => async () => {
@@ -172,6 +176,19 @@ export default function Settings({ onChange }: { onChange: () => void }) {
               <pre style={{ maxHeight: 260 }}>{skill.guide}</pre>
             </details>
           )}
+        </section>
+
+        <section className="panel" style={{ marginTop: 16 }}>
+          <h2>UI languages</h2>
+          <div className="small" style={{ marginBottom: 8 }}>
+            Intro text and example prompts are translated once per language and cached.{' '}
+            {i18n ? `Ready: Learn ${i18n.have.learn}/${i18n.languages}, Chat ${i18n.have.chat}/${i18n.languages}.` : ''}
+            {i18n?.running ? ` Translating ${i18n.done}/${i18n.total}… (${i18n.current})` : ''}
+          </div>
+          <button className="ghost" disabled={!info?.openrouter_key_set || i18n?.running} onClick={() => api.i18nWarm().then(setI18n).catch((e) => setError((e as Error).message))}>
+            {i18n?.running ? 'Translating…' : 'Pre-translate all languages now'}
+          </button>
+          <span className="small" style={{ marginLeft: 8 }}>~{i18n ? Math.max(0, i18n.languages * 2 - i18n.have.learn - i18n.have.chat) : '?'} small calls to the text model</span>
         </section>
 
         <section className="panel" style={{ marginTop: 16 }}>

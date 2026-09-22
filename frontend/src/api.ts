@@ -1,4 +1,4 @@
-import type { ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, LearnDoc, LearnMsg, LearnSource, LibraryEntry, ORModel, PlanResult, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
+import type { I18nStatus, ChatMsg, ChatSession, ChatSessionSummary, ChatTurn, DatasetInfo, DatasetSource, Engine, EvalEvent, EvalResult, InspectResult, KaggleInspect, LearnDoc, LearnMsg, LearnSource, LibraryEntry, ORModel, PlanResult, PredictResult, Questions, State, UploadResult, UsageSummary } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`/api${path}`, {
@@ -119,6 +119,8 @@ export const api = {
     return done
   },
   learnI18n: (lang: string, scope: 'learn' | 'chat' = 'learn') => req<{ lang: string; intro: string; placeholder: string; starters: string[]; fallback?: boolean }>(`/learn/i18n?lang=${encodeURIComponent(lang)}&scope=${scope}`),
+  i18nWarm: () => req<I18nStatus>('/learn/i18n/warm', { method: 'POST' }),
+  i18nStatus: () => req<I18nStatus>('/learn/i18n/status'),
   learnSessions: () => req<ChatSessionSummary[]>('/learn/sessions'),
   learnSession: (id: string) => req<{ id: string; title: string; messages: LearnMsg[] }>(`/learn/sessions/${id}`),
   deleteLearnSession: (id: string) => req<{ ok: boolean }>(`/learn/sessions/${id}`, { method: 'DELETE' }),
