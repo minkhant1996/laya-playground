@@ -4,6 +4,7 @@ import { api } from '../api'
 import type { ChatMsg, ChatSessionSummary, Engine, PredictResult, Question, Questions, QuestionType } from '../types'
 import AnswerList from './AnswerList'
 import EnginePicker from './EnginePicker'
+import { useConfirm } from './ConfirmDialog'
 import LangPicker from './LangPicker'
 
 const DEFAULT_UI = {
@@ -70,6 +71,7 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
   })
   const [manualMs, setManualMs] = useState<number | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
+  const { confirm, dialog } = useConfirm()
   const [ui, setUi] = useState(DEFAULT_UI)
   const [uiLoading, setUiLoading] = useState(false)
   useEffect(() => {
@@ -114,6 +116,8 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
     setError('')
   }
   async function removeSession(id: string) {
+    const s = sessions.find((x) => x.id === id)
+    if (!(await confirm({ title: 'Delete this chat?', message: <span>“{s?.title ?? id}” and its answers will be removed.</span> }))) return
     await api.deleteSession(id)
     if (id === sessionId) newChat()
     loadSessions()
@@ -183,6 +187,7 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
 
   return (
     <div>
+      {dialog}
       <section className="panel">
         <h2>Decision model</h2>
         <EnginePicker value={engine} onChange={setEngine} compact openrouterReady={aiEnabled} typesafeReady={typesafeReady} />
@@ -226,8 +231,8 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
               <button
                 className="chip"
                 style={{ marginTop: 8 }}
-                onClick={() => {
-                  if (confirm('Delete all chats?')) api.deleteAllSessions().then(() => (newChat(), loadSessions()))
+                onClick={async () => {
+                  if (await confirm({ title: 'Delete all chats?', message: `${sessions.length} saved chats will be removed.` })) api.deleteAllSessions().then(() => (newChat(), loadSessions()))
                 }}
               >
                 Delete all

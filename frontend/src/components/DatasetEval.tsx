@@ -3,6 +3,7 @@ import EnginePicker from "./EnginePicker";
 import EvalTable from "./EvalTable";
 import PlanEditor from "./PlanEditor";
 import CompareView from "./CompareView";
+import { useConfirm } from "./ConfirmDialog";
 import { api } from "../api";
 import type {
   DatasetInfo,
@@ -118,6 +119,7 @@ export default function DatasetEval({
   const [loadInfo, setLoadInfo] = useState<string>("");
   const [liveRows, setLiveRows] = useState<EvalRow[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  const { confirm, dialog } = useConfirm();
   useEffect(() => {
     setEngine(defaultEngine);
   }, [defaultEngine]);
@@ -513,8 +515,13 @@ export default function DatasetEval({
           {history.length > 1 && (
             <button
               className="chip"
-              onClick={() => {
-                if (confirm("Delete all evaluation history?"))
+              onClick={async () => {
+                if (
+                  await confirm({
+                    title: "Delete all evaluation history?",
+                    message: `${history.length} saved runs will be removed.`,
+                  })
+                )
                   api.evalDeleteAll().then(loadHistory);
               }}
             >
@@ -557,9 +564,15 @@ export default function DatasetEval({
             </small>
             <button
               title="Delete"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
-                api.evalDelete(h.id).then(loadHistory);
+                if (
+                  await confirm({
+                    title: "Delete this run?",
+                    message: <span>“{h.title}” will be removed.</span>,
+                  })
+                )
+                  api.evalDelete(h.id).then(loadHistory);
               }}
             >
               ✕
@@ -579,6 +592,7 @@ export default function DatasetEval({
 
   return (
     <div className={`evalwrap ${historyOpen ? "" : "min"}`}>
+      {dialog}
       {historyPanel}
       <div>
         <section className="panel">

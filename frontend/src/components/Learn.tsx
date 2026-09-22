@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import type { ChatSessionSummary, LearnDoc, LearnMsg } from '../types'
 import LangPicker from './LangPicker'
+import { useConfirm } from './ConfirmDialog'
 
 const DEFAULT_UI = {
   intro: 'Ask anything about System One models, Jev, Laya, the three question types, confidence, or the design patterns, in any language. I answer in your language, only from the documents in the hub, and cite them.',
@@ -40,6 +41,7 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
     }
   })
   const bottom = useRef<HTMLDivElement>(null)
+  const { confirm, dialog } = useConfirm()
   const [ui, setUi] = useState(DEFAULT_UI)
   const [uiLoading, setUiLoading] = useState(false)
 
@@ -64,6 +66,8 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
     setError('')
   }
   async function removeSession(id: string) {
+    const s = sessions.find((x) => x.id === id)
+    if (!(await confirm({ title: 'Delete this session?', message: <span>“{s?.title ?? id}” will be removed.</span> }))) return
     await api.deleteLearnSession(id)
     if (id === sessionId) newSession()
     loadSessions()
@@ -125,6 +129,7 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
 
   return (
     <div className="chatwrap" style={{ gridTemplateColumns: '260px 1fr' }}>
+      {dialog}
       <div>
       <section className="panel">
         <h2>Sessions</h2>
@@ -153,8 +158,8 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
           <button
             className="chip"
             style={{ marginTop: 8 }}
-            onClick={() => {
-              if (confirm('Delete all Learn sessions?')) api.deleteAllLearnSessions().then(() => (newSession(), loadSessions()))
+            onClick={async () => {
+              if (await confirm({ title: 'Delete all Learn sessions?', message: `${sessions.length} saved sessions will be removed.` })) api.deleteAllLearnSessions().then(() => (newSession(), loadSessions()))
             }}
           >
             Delete all

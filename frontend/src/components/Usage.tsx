@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { UsageBucket, UsageSummary } from '../types'
+import { useConfirm } from './ConfirmDialog'
 
 const usd = (v: number) => (v ? `$${v.toFixed(v < 0.01 ? 5 : 4)}` : '$0')
 const ms = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(2)} s` : `${v.toFixed(0)} ms`)
@@ -42,6 +43,7 @@ export default function Usage() {
   const [data, setData] = useState<UsageSummary | null>(null)
   const [days, setDays] = useState<number | undefined>(undefined)
   const [error, setError] = useState('')
+  const { confirm, dialog } = useConfirm()
 
   const load = (d = days) => api.usage(d).then(setData).catch((e) => setError((e as Error).message))
   useEffect(() => {
@@ -53,6 +55,7 @@ export default function Usage() {
 
   return (
     <div>
+      {dialog}
       <section className="panel">
         <h2>Usage</h2>
         <div className="row" style={{ marginTop: 0 }}>
@@ -70,8 +73,8 @@ export default function Usage() {
           <button
             className="ghost"
             style={{ marginLeft: 'auto' }}
-            onClick={() => {
-              if (confirm('Clear the usage log?')) api.clearUsage().then(() => load())
+            onClick={async () => {
+              if (await confirm({ title: 'Clear the usage log?', confirmLabel: 'Clear' })) api.clearUsage().then(() => load())
             }}
           >
             Clear log

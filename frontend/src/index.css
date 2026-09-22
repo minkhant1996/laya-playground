@@ -142,3 +142,6 @@ table.aligned th:not(:first-child), table.aligned td:not(:first-child) { text-al
 .hist-min { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 6px; }
 .hist-min .count { font-size: 12px; font-weight: 600; color: var(--text); writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: .04em; }
 .hist-min .iconbtn { border-color: var(--accent); color: var(--accent); }
+.modal.confirm { width: 95%; max-width: 440px; }
+@media (min-width: 768px) { .modal.confirm { width: 440px; } }
+button.primary.danger { background: var(--bad); }
