@@ -1,0 +1,91 @@
+export type QuestionType = 'choice' | 'score' | 'noul'
+
+export interface Question {
+  type: QuestionType
+  instructions: string
+  criteria?: Record<string, string> | string[]
+}
+
+export type Questions = Record<string, Question>
+export type State = string | Record<string, unknown>
+
+export interface Answer {
+  type: QuestionType
+  choice?: string
+  score?: number
+  noul?: number
+  confidence?: number
+  [k: string]: unknown
+}
+
+export interface PredictResult {
+  answers: Record<string, Answer>
+  routing?: { model: string; repo: string; reason: string }
+  [k: string]: unknown
+}
+
+export interface DatasetInfo {
+  id: string
+  name: string
+  path: string
+  config: string | null
+  text_column: string
+  label_column: string
+  description: string
+}
+
+export interface EvalRow {
+  text: string
+  gold: string
+  pred: string
+  confidence: number | null
+  correct: boolean
+}
+
+export interface EvalResult {
+  shortlist_k?: number | null
+  dataset_id: string
+  n: number
+  accuracy: number
+  labels: string[]
+  criteria: Record<string, string>
+  routing: PredictResult['routing'] | null
+  rows: EvalRow[]
+  per_label: Record<string, { n: number; accuracy: number }>
+}
+
+export interface DatasetSource {
+  kind: 'preset' | 'hf' | 'upload'
+  dataset_id?: string
+  path?: string
+  config?: string | null
+  upload_id?: string
+  text_column?: string | null
+  label_column?: string | null
+}
+
+export interface InspectResult {
+  path: string
+  config?: string | null
+  configs: string[]
+  needs_config: boolean
+  splits?: string[]
+  default_split?: string
+  columns?: string[]
+  text_column?: string | null
+  label_column?: string | null
+  size?: number
+  labels?: string[]
+  preview?: Record<string, unknown>[]
+}
+
+export interface UploadResult {
+  upload_id: string
+  filename: string
+  size: number
+  columns: string[]
+  text_column: string | null
+  label_column: string | null
+  labels: string[]
+  preview: Record<string, unknown>[]
+}

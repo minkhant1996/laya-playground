@@ -1,0 +1,9 @@
+laya
+fastapi
+uvicorn[standard]
+httpx
+datasets
+python-dotenv
+pydantic-settings
+cryptography
+python-multipart
