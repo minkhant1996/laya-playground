@@ -1,7 +1,7 @@
 import { marked } from 'marked'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
-import type { ChatMsg, ChatSessionSummary, Engine, PredictResult, Questions } from '../types'
+import type { ChatMsg, ChatSessionSummary, Engine, PredictResult, Question, Questions, QuestionType } from '../types'
 import AnswerList from './AnswerList'
 import EnginePicker from './EnginePicker'
 
@@ -32,6 +32,12 @@ function safeParse(t: string): Questions | null {
   }
 }
 
+const TEMPLATES: Record<QuestionType, { help: string; make: () => Question }> = {
+  choice: { help: 'Pick one option from a set you define. Returns the chosen option, the full probability distribution and a confidence.', make: () => ({ type: 'choice', instructions: 'Which category fits best?', criteria: { option_a: 'describe when option_a applies', option_b: 'describe when option_b applies', other: 'anything else' } }) },
+  score: { help: 'Rate the state along an ordered rubric (2–10 levels, low → high). Returns the expected level as a number plus per-level probabilities.', make: () => ({ type: 'score', instructions: 'How severe is this?', criteria: ['not at all', 'somewhat', 'very'] }) },
+  noul: { help: 'A yes/no question. Returns the probability (0–1) that the answer is yes.', make: () => ({ type: 'noul', instructions: 'Is this a question about the model?' }) },
+}
+
 function md(text: string) {
   return { __html: marked.parse(text, { async: false }) as string }
 }
@@ -49,6 +55,8 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
   const [stateText, setStateText] = useState('')
   const [questionsText, setQuestionsText] = useState(JSON.stringify(DEFAULT_QUESTIONS, null, 2))
   const [advResult, setAdvResult] = useState<PredictResult | null>(null)
+  const [manualStatus, setManualStatus] = useState('')
+  const [manualMs, setManualMs] = useState<number | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -115,14 +123,35 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
   async function runManual() {
     setError('')
     setBusy(true)
+    setManualMs(null)
+    const label = engine.kind === 'laya' ? 'Laya (local)' : `Jev (${engine.model ?? 'jev-1.13'} via OpenRouter)`
+    setManualStatus(`deciding with ${label}…${engine.kind === 'laya' && !advResult ? ' (first call loads the model, ~30 s)' : ''}`)
+    const t0 = performance.now()
     try {
       const st = stateText.trim().startsWith('{') ? JSON.parse(stateText) : stateText
-      setAdvResult(await api.predict(st, JSON.parse(questionsText), engine))
+      const q = JSON.parse(questionsText) as Questions
+      setAdvResult(await api.predict(st, q, engine))
+      setManualMs(Math.round(performance.now() - t0))
+      setManualStatus('')
     } catch (e) {
       setError((e as Error).message)
+      setManualStatus('')
     } finally {
       setBusy(false)
     }
+  }
+
+  function addQuestion(t: QuestionType) {
+    let q: Questions = {}
+    try {
+      q = JSON.parse(questionsText) || {}
+    } catch {
+      q = {}
+    }
+    let name = t === 'noul' ? 'is_yes' : t
+    let i = 2
+    while (q[name]) name = `${t}_${i++}`
+    setQuestionsText(JSON.stringify({ ...q, [name]: TEMPLATES[t].make() }, null, 2))
   }
 
   return (
@@ -250,15 +279,42 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
             <div>
               <div className="small">State (text or JSON)</div>
               <textarea className="code" style={{ minHeight: 120 }} value={stateText} onChange={(e) => setStateText(e.target.value)} placeholder="Paste text or a JSON object" />
-              <div className="small" style={{ marginTop: 8 }}>Questions JSON</div>
+              <div className="small" style={{ marginTop: 8 }}>Questions JSON · add a question of each type:</div>
+              <div className="chips" style={{ margin: '4px 0 6px' }}>
+                {(Object.keys(TEMPLATES) as QuestionType[]).map((t) => (
+                  <button key={t} className="chip" title={TEMPLATES[t].help} onClick={() => addQuestion(t)}>
+                    + {t === 'noul' ? 'noul (yes/no)' : t}
+                  </button>
+                ))}
+                <button className="chip" onClick={() => setQuestionsText(JSON.stringify(DEFAULT_QUESTIONS, null, 2))}>
+                  example set
+                </button>
+                <button className="chip" onClick={() => setQuestionsText('{}')}>
+                  clear
+                </button>
+              </div>
               <textarea className="code" value={questionsText} onChange={(e) => setQuestionsText(e.target.value)} />
+              <details>
+                <summary>The three query types</summary>
+                <ul className="small">
+                  {(Object.keys(TEMPLATES) as QuestionType[]).map((t) => (
+                    <li key={t}>
+                      <b>{t}</b> — {TEMPLATES[t].help}
+                    </li>
+                  ))}
+                </ul>
+              </details>
               <div className="row">
                 <button className="primary" disabled={busy || !stateText.trim()} onClick={runManual}>
-                  Run
+                  {busy && manualStatus ? 'Running…' : 'Run'}
                 </button>
-                <button className="ghost" onClick={() => setQuestionsText(JSON.stringify(DEFAULT_QUESTIONS, null, 2))}>
-                  Example questions
-                </button>
+                {manualStatus && (
+                  <span className="small">
+                    <span className="step on" style={{ marginRight: 6 }}>deciding</span>
+                    {manualStatus}
+                  </span>
+                )}
+                {!manualStatus && manualMs !== null && <span className="small">answered in {manualMs} ms</span>}
               </div>
             </div>
             <div>
