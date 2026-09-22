@@ -18,6 +18,20 @@ const DEFAULT_QUESTIONS: Questions = {
   churn_risk: { type: 'noul', instructions: 'Does the user threaten to cancel or leave?' },
 }
 
+function levelsOf(q?: Questions | null): Record<string, string[]> | undefined {
+  if (!q) return undefined
+  const out: Record<string, string[]> = {}
+  for (const [k, v] of Object.entries(q)) if (v.type === 'score' && Array.isArray(v.criteria)) out[k] = v.criteria
+  return out
+}
+function safeParse(t: string): Questions | null {
+  try {
+    return JSON.parse(t)
+  } catch {
+    return null
+  }
+}
+
 function md(text: string) {
   return { __html: marked.parse(text, { async: false }) as string }
 }
@@ -184,7 +198,7 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
               {msgs.map((m, i) => (
                 <div key={i} className={`msg ${m.role}`}>
                   <div dangerouslySetInnerHTML={md(m.content)} />
-                  {m.result && <AnswerList result={m.result} />}
+                  {m.result && <AnswerList result={m.result} levels={levelsOf(m.spec?.questions)} />}
                   {m.spec && (
                     <details>
                       <summary>Questions JSON used</summary>
@@ -248,7 +262,7 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
               </div>
             </div>
             <div>
-              {advResult ? <AnswerList result={advResult} /> : <div className="small">Answers appear here.</div>}
+              {advResult ? <AnswerList result={advResult} levels={levelsOf(safeParse(questionsText))} /> : <div className="small">Answers appear here.</div>}
               {advResult && (
                 <details>
                   <summary>Raw JSON</summary>

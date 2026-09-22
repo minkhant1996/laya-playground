@@ -15,6 +15,7 @@ export interface Answer {
   score?: number
   noul?: number
   confidence?: number
+  probabilities?: Record<string, number>
   [k: string]: unknown
 }
 
