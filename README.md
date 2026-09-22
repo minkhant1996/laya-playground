@@ -22,7 +22,24 @@ Frontend (Vite + React + TypeScript) and backend (FastAPI) around the
   Evaluation streams live progress (sample count, running accuracy, ETA, latest rows) and can be stopped.
 - **Settings** – save the OpenRouter key from the UI (see Security below).
 
-## Quick setup
+## Docker (easiest)
+
+```bash
+./docker.sh install   # installs Docker if missing (Linux: get.docker.com; macOS: brew cask; Windows: use docker.bat)
+./docker.sh up        # build images and start backend + frontend in the background
+./docker.sh logs      # follow logs        ./docker.sh status
+./docker.sh down      # stop               ./docker.sh clean   # also remove images + volumes
+```
+On Windows use `docker.bat` with the same commands (`docker.bat install` uses winget to install
+Docker Desktop). Then open http://localhost:5173. The frontend container (nginx) serves the built
+app and proxies `/api` to the backend container, so no CORS or port juggling.
+
+- `backend/data/` (uploads, runs, keys) is bind-mounted, so it survives rebuilds.
+- The Laya checkpoints (~2.3 GB) download on first use into the `hf-cache` Docker volume, so they
+  are downloaded once, not per rebuild. The image uses CPU-only PyTorch (~1.5 GB image).
+- `backend/.env` is loaded if present; keys saved from the Settings tab go to `backend/data/`.
+
+## Quick setup (without Docker)
 
 ```bash
 ./setup.sh          # Linux / macOS: venv + pip deps, npm install, creates backend/.env
