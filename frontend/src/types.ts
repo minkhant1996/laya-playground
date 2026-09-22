@@ -279,4 +279,6 @@ export interface SystemInfo {
   laya_device: string
   os: string
   note: string | null
+  free_mb: number
+  laya_min_free_mb: number
 }

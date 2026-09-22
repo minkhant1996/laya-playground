@@ -8,6 +8,29 @@ os.environ.setdefault("USE_TF", "0")  # README: TF probing can hang transformers
 os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
 
 
+MIN_FREE_MB_TO_LOAD = 2600      # one checkpoint ≈ 1.7–2.3 GB in RAM plus headroom
+MIN_FREE_MB_TO_RUN = 400        # below this we stop an evaluation rather than let the OS thrash / kill us
+
+
+class NotEnoughMemory(RuntimeError):
+    pass
+
+
+def free_mb() -> float:
+    import psutil
+
+    return psutil.virtual_memory().available / 2**20
+
+
+def check_memory_to_load() -> None:
+    free = free_mb()
+    if free < MIN_FREE_MB_TO_LOAD:
+        raise NotEnoughMemory(
+            f"only {free / 1024:.1f} GB of RAM is free; loading a Laya checkpoint needs about {MIN_FREE_MB_TO_LOAD / 1024:.1f} GB. "
+            "Close other programs, or switch the decision model to Jev (runs in the cloud)."
+        )
+
+
 def is_loaded() -> bool:
     return get_router.cache_info().currsize > 0
 
@@ -18,6 +41,7 @@ async def ensure_loaded() -> float:
 
     if is_loaded():
         return 0.0
+    check_memory_to_load()
     t0 = time.perf_counter()
     await asyncio.to_thread(get_router)
     return time.perf_counter() - t0
@@ -25,9 +49,12 @@ async def ensure_loaded() -> float:
 
 @lru_cache(maxsize=1)
 def get_router():
+    """Lazy router: checkpoints load on first use, one at a time (English ≈ 1.7 GB, multilingual ≈ 1.3 GB),
+    instead of all three up front, so a machine with 4 GB free can still run it."""
     from laya import Router
 
-    return Router(preload=True)
+    check_memory_to_load()
+    return Router(preload=False)
 
 
 _embed_fns: dict[str, Any] = {}
@@ -98,6 +125,8 @@ async def predict(state: Any, questions: dict[str, Any], shortlist_k: int | None
 
     t0 = time.perf_counter()
     try:
+        if not is_loaded():
+            check_memory_to_load()
         res = await asyncio.to_thread(_predict_sync, state, questions, shortlist_k)
     except Exception as e:
         usage.record(purpose="decide", engine="laya", model=None, latency_ms=(time.perf_counter() - t0) * 1000, ok=False, error=str(e))

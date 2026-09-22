@@ -47,6 +47,8 @@ async def predict(req: PredictRequest) -> dict[str, Any]:
     questions = {k: v.model_dump(exclude_none=True) for k, v in req.questions.items()}
     try:
         return await laya_service.decide(req.state, questions, req.engine.model_dump() if req.engine else None)
+    except laya_service.NotEnoughMemory as e:
+        raise HTTPException(507, str(e))
     except Exception as e:  # surface model errors to the UI
         raise HTTPException(500, f"decision error: {e}")
 
@@ -485,7 +487,11 @@ async def _evaluate_events(req: EvaluateRequest):
 
     load_s = 0.0
     if engine.get("kind") == "laya" and not laya_service.is_loaded():
-        yield {"type": "status", "stage": "loading", "message": "loading Laya checkpoints into memory (first use, ~2.3 GB)…"}
+        try:
+            laya_service.check_memory_to_load()
+        except laya_service.NotEnoughMemory as e:
+            raise HTTPException(507, str(e))
+        yield {"type": "status", "stage": "loading", "message": f"loading Laya (first use; {laya_service.free_mb() / 1024:.1f} GB RAM free)…"}
         load_s = await laya_service.ensure_loaded()
         yield {"type": "status", "stage": "loaded", "message": f"Laya ready in {load_s:.1f}s", "load_seconds": round(load_s, 1)}
 
@@ -569,6 +575,10 @@ async def _evaluate_events(req: EvaluateRequest):
             rows.append(row)
             cur_mem = None
             if track_mem and (i % 2 == 0 or i == n_total - 1):
+                free = laya_service.free_mb()
+                if free < laya_service.MIN_FREE_MB_TO_RUN:
+                    yield {"type": "error", "message": f"stopped after {i + 1} samples: only {free:.0f} MB of RAM left. Close other programs or use Jev.", "partial": True}
+                    return
                 m = sysinfo.quick_mem()
                 peak_rss = max(peak_rss, m["rss_mb"])
                 if m["vram_mb"] is not None:

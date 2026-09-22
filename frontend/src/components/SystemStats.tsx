@@ -56,6 +56,11 @@ export default function SystemStats({ compact }: { compact?: boolean }) {
         )}
       </div>
       {s.note && <div className="small" style={{ color: '#ffb454' }}>⚠ {s.note}</div>}
+      {!s.laya_loaded && s.free_mb < s.laya_min_free_mb && (
+        <div className="small" style={{ color: 'var(--bad)' }}>
+          ⚠ Only {gb(s.free_mb)} RAM free; Laya needs about {gb(s.laya_min_free_mb)} to load. The backend will refuse to load it rather than exhaust memory. Use Jev or close other programs.
+        </div>
+      )}
     </section>
   )
 }

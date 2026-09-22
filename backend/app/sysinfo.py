@@ -86,6 +86,8 @@ def snapshot() -> dict[str, Any]:
         "laya_loaded": laya_service.is_loaded(),
         "laya_device": dev,
         "os": f"{platform.system()} {platform.release()}",
+        "free_mb": vm.available / 2**20,
+        "laya_min_free_mb": laya_service.MIN_FREE_MB_TO_LOAD,
         "note": note,
     }
 
