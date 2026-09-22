@@ -1,39 +1,63 @@
 # System One Playground
 
-Frontend (Vite + React + TypeScript) and backend (FastAPI) for **System One** decision models:
-[Laya](https://huggingface.co/convaiinnovations/laya) (local, open weights) and
-[Jev](https://openrouter.ai/typesafe/jev-1.13) (TypeSafe, via OpenRouter). Both take a state plus typed
-questions and return calibrated answers instead of text.
+A local web app for **System One decision models**: [Laya](https://huggingface.co/convaiinnovations/laya)
+(open weights, runs on your machine) and TypeSafe's [Jev](https://openrouter.ai/typesafe/jev-1.13)
+(via OpenRouter). Both take a *state* plus typed *questions* and return calibrated answers instead of
+text. FastAPI + scikit backend, Vite + React + TypeScript frontend, Docker ready. MIT licensed.
 
-- **Playground (chat)** – talk to a text model of your choice from OpenRouter. It asks what you
-  want to decide, turns it into typed questions (`choice`, `score`, `noul`), runs the decision
-  model, and explains the answers. An *Advanced* panel exposes the raw state/questions JSON.
-- **Decision model** – Laya (local) or TypeSafe's **Jev** (through OpenRouter's `/systemone` endpoint with your OpenRouter key, or directly with a TypeSafe key). Chosen in Settings, overridable per chat / per eval.
-- **TypeSafe / Jev agent skill** – `backend/skills/` holds the skill (`SKILL.md`) and primitive docs
-  fetched from docs.typesafe.ai. Laya and Jev share the same question schema, so the distilled
-  question-writing guidance is injected into the text model's prompt. `GET /api/skill` shows it.
-- **Multilingual** – state, instructions, option names and rubrics can all be in any language (Burmese,
-  Thai, Hindi…). Laya is routed to its multilingual checkpoint whenever the state *or the questions* use a
-  non-Latin script; Jev accepts them directly. Chat and Learn reply in the user's language, or a chosen one.
-- **Chat sessions** – every chat is saved on the backend (`backend/data/chats/`), listed in a sidebar,
-  reopenable, and deletable one by one or all at once.
-- **Learn tab** – ask questions about System One, Jev, Laya, the question types, confidence and the
-  design patterns. The text model works as a small agent over `backend/knowledge-hub/` only: it first
-  picks up to three relevant files from the index, then reads just those and answers with citations.
-  The hub holds Markdown copies of the TypeSafe docs, the launch blog post and the Laya model card,
-  with source links in `index.json` / `README.md`. The agent cannot read anything outside the hub.
-- **Usage tab** – every model call (chat, prepare, criteria, decide, explain) is logged with tokens,
-  latency and estimated OpenRouter cost, with breakdowns by model, purpose and day.
-- **Dataset eval** – run Laya as a zero-shot classifier and see accuracy, from three sources:
-  - presets (Banking77, DAIR Emotion, AG News, TweetEval sentiment, SST-2, CLINC150),
-  - any Kaggle dataset link or `owner/name` (public ones need no account; add credentials in Settings
-    for private ones), with file picker and header toggle,
-  - any Hugging Face dataset link or id (`https://huggingface.co/datasets/owner/name`, `owner/name`, `owner/name:config`),
-    downloaded on demand with text/label columns auto-guessed and editable,
-  - your own JSON / JSONL / CSV file (list of `{text, label}` records or a HF rows export).
-  Optional *shortlist k* embeds labels and asks Laya only over the top-k for many-label sets.
-  Evaluation streams live progress (sample count, running accuracy, ETA, latest rows) and can be stopped.
-- **Settings** – save the OpenRouter key from the UI (see Security below).
+## What you can do
+
+**Playground**
+- **Chat** with a text model of your choice from OpenRouter (searchable picker, 400+ models). It asks what
+  you want to decide, writes the typed questions, runs the decision model, and explains the answers.
+  Stages stream live: *preparing → deciding → explaining*.
+- **Manual JSON**: edit the state and questions directly; templates for each query type; latency shown.
+- Answers render per type: full probability distribution for `choice`, a scale with marker for `score`,
+  yes/no bars for `noul`, all with calibrated confidence.
+- Sessions are saved, listed in a sidebar, reopenable and deletable (with confirmation).
+- Works in any language: state, instructions and option names can be in Burmese, Thai, Hindi… Laya is
+  routed to its multilingual checkpoint whenever the state *or the questions* use a non-Latin script; Jev
+  reads them directly. A "reply in" picker (85+ languages with flags) forces the answer language.
+
+**Dataset eval** – benchmark zero-shot classification
+- Sources: 6 presets (Banking77, DAIR Emotion, AG News, TweetEval sentiment, SST-2, CLINC150), any
+  **Kaggle** link (public sets need no account), any **Hugging Face** dataset link, or your own CSV / JSON /
+  JSONL upload. Downloads are cached; a **Saved** tab reuses any source with its columns and plan.
+- Split picker with row counts (train / test / validation / all mixed); samples bounded by the split size.
+- **Prepare with AI**: an agent reads the columns and sample rows and proposes the state columns, label
+  column, question type (`choice`, `score` or `noul`), instructions, criteria and the label mapping. You
+  edit it in a form. Plans are saved per dataset; the presets ship with ready-made plans.
+- Live progress: model-loading status, `i / n` counter, running accuracy, ETA and average per-query time
+  (excluding model load), latest rows, Stop button. Results table with actual / predicted / confidence /
+  time and a green–red correct badge; per-label accuracy; MAE for score questions.
+- **Compare Laya vs Jev** on the same samples: accuracy, speed, agreement, both-right / only-one-right,
+  per-row and per-label tables.
+- Every run and comparison is kept in a **History** column (left, minimizable) and can be reopened or deleted.
+
+**Learn** – a documentation agent restricted to `backend/knowledge-hub/`
+- 20 Markdown pages (TypeSafe docs, launch blog post, Laya model card) with source links. The text model first
+  picks up to three files from the index, then reads only those and answers with citations. It cannot read
+  anything else on disk. Documents open in a popup viewer (MDX cleaned to plain Markdown).
+- Answers in the question's language or a chosen one; intro and starter questions are localized (built-in
+  for several languages, translated once and cached for the rest; a background job can pre-translate all).
+- Learn sessions are saved and deletable like chats.
+
+**Settings**
+- OpenRouter key (verified, then stored encrypted; never returned to the browser), optional TypeSafe key
+  (Jev direct) and Kaggle credentials (private datasets).
+- Text model for preparing / chat / Learn (searchable OpenRouter picker); decision model default
+  (Laya local or Jev jev-1.13 / jev-latest); UI language pre-translation.
+- The TypeSafe / Jev **agent skill** (`backend/skills/`) is baked into the prompts; the distilled guidance is shown here.
+
+**Usage** – every model call logged with tokens, latency and estimated OpenRouter cost; breakdowns by
+model, purpose and day; live **RAM / VRAM / CPU** meters (NVIDIA, Apple Metal, or CPU-only). Laya runs
+fine on CPU (~80 ms per query on a desktop CPU once loaded); a GPU is optional.
+
+## Requirements
+
+- Python 3.10+, Node 18+ (or just Docker). ~2.5 GB free RAM for Laya, ~2.3 GB disk for its checkpoints.
+- An OpenRouter API key for anything involving a text model (chat, Prepare with AI, Learn, Jev).
+  Manual JSON and dataset eval with Laya work without one.
 
 ## Docker (easiest)
 
@@ -47,7 +71,7 @@ On Windows use `docker.bat` with the same commands (`docker.bat install` uses wi
 Docker Desktop). Then open http://localhost:5173. The frontend container (nginx) serves the built
 app and proxies `/api` to the backend container, so no CORS or port juggling.
 
-- `backend/data/` (uploads, runs, keys) is bind-mounted, so it survives rebuilds.
+- `backend/data/` (keys, sessions, history, saved datasets, caches) is bind-mounted, so it survives rebuilds. It is git-ignored: nothing in it is ever committed.
 - The Laya checkpoints (~2.3 GB) download on first use into the `hf-cache` Docker volume, so they
   are downloaded once, not per rebuild. The image uses CPU-only PyTorch (~1.5 GB image).
 - `backend/.env` is loaded if present; keys saved from the Settings tab go to `backend/data/`.
@@ -107,7 +131,14 @@ First model load downloads ~2 GB of checkpoints. Without a GPU, evaluation is ro
 | PUT | `/api/settings/openrouter` | `{api_key, model?}` verify with OpenRouter, then store encrypted |
 | DELETE | `/api/settings/openrouter` | remove the UI-saved key |
 
-## Security of the API key
+## Data & privacy
+
+Everything the app stores lives in `backend/data/` and stays on your machine: encrypted keys, chat and Learn
+sessions, evaluation history, saved dataset shortcuts and plans, uploads, the Kaggle cache, usage log and UI
+translations. The folder is git-ignored. Only `backend/preset_plans.json` (plans for the built-in presets) and
+`backend/knowledge-hub/` (public docs) are committed.
+
+## Security of the API keys
 
 - The key entered in Settings is sent once to the local backend and is **never** kept in the
   browser (no localStorage, cookies, or query strings); the input is cleared after saving.
