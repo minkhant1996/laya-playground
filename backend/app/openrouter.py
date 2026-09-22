@@ -63,7 +63,7 @@ async def chat_messages(messages: list[dict[str, str]], purpose: str = "chat", j
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(
             f"{settings.openrouter_base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "HTTP-Referer": "http://localhost:5173", "X-Title": "Laya Playground"},
+            headers={"Authorization": f"Bearer {api_key}", "HTTP-Referer": "http://localhost:5173", "X-Title": "System One Playground"},
             json={"model": model, "messages": messages, "temperature": temperature},
         )
         if r.status_code >= 400:
@@ -89,7 +89,7 @@ async def chat_json(system: str, user: str, purpose: str = "prepare") -> Any:
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "HTTP-Referer": "http://localhost:5173",
-                "X-Title": "Laya Playground",
+                "X-Title": "System One Playground",
             },
             json={
                 "model": model,
@@ -188,7 +188,7 @@ async def decide(state: Any, questions: dict[str, Any], model: str) -> dict[str,
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(
             f"{settings.openrouter_base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "HTTP-Referer": "http://localhost:5173", "X-Title": "Laya Playground"},
+            headers={"Authorization": f"Bearer {api_key}", "HTTP-Referer": "http://localhost:5173", "X-Title": "System One Playground"},
             json={"model": model, "temperature": 0, "messages": [{"role": "system", "content": DECIDE_PROMPT}, {"role": "user", "content": user}]},
         )
         if r.status_code >= 400:
@@ -234,7 +234,7 @@ async def jev_decide(state: Any, questions: dict[str, Any], model: str = "jev-1.
     if via == "openrouter":
         key = api_key or get_openrouter_key()
         url = f"{settings.openrouter_base_url}/systemone"
-        headers = {"Authorization": f"Bearer {key}", "HTTP-Referer": "http://localhost:5173", "X-Title": "Laya Playground"}
+        headers = {"Authorization": f"Bearer {key}", "HTTP-Referer": "http://localhost:5173", "X-Title": "System One Playground"}
         engine = "openrouter"
     else:
         key = api_key or get_typesafe_key()

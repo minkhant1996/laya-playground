@@ -23,7 +23,7 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        <h1>Laya Playground</h1>
+        <h1>System One Playground</h1>
         <span className="status">
           {health
             ? `backend ok · text model: ${health.openrouter_configured ? health.openrouter_model : 'OpenRouter not configured'} · decisions: ${engine.kind === 'laya' ? 'Laya (local)' : engine.model}`

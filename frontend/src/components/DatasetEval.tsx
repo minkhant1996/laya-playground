@@ -62,7 +62,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
       if (r.needs_config) {
         setHfConfig(r.configs[0] ?? '')
       } else {
-        setTextCol(r.text_column ?? '')
+        setTextCol(r.text_column ?? '__all__')
         setLabelCol(r.label_column ?? '')
         if (r.default_split) setSplit(r.default_split)
       }
@@ -79,7 +79,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
     try {
       const r = await api.inspectKaggle(kgRef, file, header)
       setKg(r)
-      setTextCol(r.text_column ?? '')
+      setTextCol(r.text_column ?? '__all__')
       setLabelCol(r.label_column ?? '')
     } catch (e) {
       setError((e as Error).message)
@@ -94,7 +94,7 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
     try {
       const r = await api.upload(file)
       setUpload(r)
-      setTextCol(r.text_column ?? '')
+      setTextCol(r.text_column ?? '__all__')
       setLabelCol(r.label_column ?? '')
     } catch (e) {
       setError((e as Error).message)

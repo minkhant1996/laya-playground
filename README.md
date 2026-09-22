@@ -1,7 +1,9 @@
-# Laya Playground
+# System One Playground
 
-Frontend (Vite + React + TypeScript) and backend (FastAPI) around the
-[convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) decision model.
+Frontend (Vite + React + TypeScript) and backend (FastAPI) for **System One** decision models:
+[Laya](https://huggingface.co/convaiinnovations/laya) (local, open weights) and
+[Jev](https://openrouter.ai/typesafe/jev-1.13) (TypeSafe, via OpenRouter). Both take a state plus typed
+questions and return calibrated answers instead of text.
 
 - **Playground (chat)** – talk to a text model of your choice from OpenRouter. It asks what you
   want to decide, turns it into typed questions (`choice`, `score`, `noul`), runs the decision
