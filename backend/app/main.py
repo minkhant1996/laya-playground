@@ -541,7 +541,7 @@ async def delete_kaggle():
 class LearnRequest(BaseModel):
     question: str = PField(min_length=1, max_length=4000)
     history: list[ChatMessage] = []
-    language: str | None = PField(default=None, max_length=40, pattern=r"^[A-Za-z \-()]*$")
+    language: str | None = PField(default=None, max_length=40, pattern=r"^[A-Za-z \-()']*$")
 
 
 @app.get("/api/learn/docs")

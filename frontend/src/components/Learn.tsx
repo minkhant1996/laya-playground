@@ -2,8 +2,7 @@ import { marked } from 'marked'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import type { LearnDoc, LearnMsg } from '../types'
-
-const LANGS = ['Auto (same as question)', 'English', 'Burmese', 'Thai', 'Chinese', 'Japanese', 'Korean', 'Hindi', 'Vietnamese', 'Indonesian', 'Spanish', 'French', 'German', 'Portuguese', 'Arabic']
+import LangPicker from './LangPicker'
 
 const STARTERS = [
   'What is a System One model and how is it different from an LLM?',
@@ -28,9 +27,10 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
   const [viewing, setViewing] = useState<{ file: string; content: string } | null>(null)
   const [lang, setLang] = useState<string>(() => {
     try {
-      return localStorage.getItem('learn-lang') ?? LANGS[0]
+      const v = localStorage.getItem('learn-lang')
+      return v && !v.startsWith('Auto (') ? v : 'Auto'
     } catch {
-      return LANGS[0]
+      return 'Auto'
     }
   })
   const bottom = useRef<HTMLDivElement>(null)
@@ -58,7 +58,7 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
     setBusy(true)
     setStage({ stage: 'selecting', message: 'starting…' })
     try {
-      const r = await api.learnAsk(q, msgs.map((m) => ({ role: m.role, content: m.content })), (stg, message) => setStage({ stage: stg, message }), lang.startsWith('Auto') ? undefined : lang)
+      const r = await api.learnAsk(q, msgs.map((m) => ({ role: m.role, content: m.content })), (stg, message) => setStage({ stage: stg, message }), lang === 'Auto' ? undefined : lang)
       setMsgs([...next, { role: 'assistant', content: r.answer, sources: r.sources }])
     } catch (e) {
       setError((e as Error).message)
@@ -97,25 +97,20 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
         <section className="panel">
           <h2 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span>Learn about System One · Jev · Laya</span>
-            <label style={{ textTransform: 'none', letterSpacing: 0, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ textTransform: 'none', letterSpacing: 0, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
               answer in
-              <select
+              <LangPicker
                 value={lang}
-                onChange={(e) => {
-                  setLang(e.target.value)
+                onChange={(v) => {
+                  setLang(v)
                   try {
-                    localStorage.setItem('learn-lang', e.target.value)
+                    localStorage.setItem('learn-lang', v)
                   } catch {
                     /* ignore */
                   }
                 }}
-                style={{ width: 'auto', padding: '4px 8px' }}
-              >
-                {LANGS.map((l) => (
-                  <option key={l}>{l}</option>
-                ))}
-              </select>
-            </label>
+              />
+            </span>
           </h2>
           {!aiEnabled && <div className="error">Add an OpenRouter key in Settings to ask questions. You can still read the documents on the left.</div>}
           <div className="chat">
