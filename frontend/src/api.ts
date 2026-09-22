@@ -131,6 +131,7 @@ export const api = {
   evalGet: (id: string) => req<EvalHistoryFull>(`/evals/${id}`),
   evalDelete: (id: string) => req<{ ok: boolean }>(`/evals/${id}`, { method: 'DELETE' }),
   evalDeleteAll: () => req<{ ok: boolean; deleted: number }>('/evals', { method: 'DELETE' }),
+  splits: (source: DatasetSource) => req<{ splits: Record<string, number> }>('/datasets/splits', { method: 'POST', body: JSON.stringify({ source }) }),
   library: () => req<LibraryEntry[]>('/datasets/library'),
   savePlan: (source: DatasetSource, split: string, plan: PlanResult) => req<{ ok: boolean; id: string }>('/datasets/library/plan', { method: 'POST', body: JSON.stringify({ source, split, plan }) }),
   clearPlan: (id: string) => req<{ ok: boolean }>(`/datasets/library/${id}/plan`, { method: 'DELETE' }),

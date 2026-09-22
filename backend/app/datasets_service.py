@@ -59,8 +59,48 @@ def _load_sync(info: DatasetInfo, split: str):
     return load_dataset(info.path, **kwargs)
 
 
+def _split_names_sync(info: DatasetInfo) -> list[str]:
+    token = settings.hf_token or None
+    try:
+        return get_dataset_split_names(info.path, info.config, token=token)
+    except Exception:
+        return ["train", "test"]
+
+
+def _load_all_sync(info: DatasetInfo):
+    from datasets import concatenate_datasets
+
+    parts = []
+    for name in _split_names_sync(info):
+        try:
+            parts.append(_load_sync(info, name))
+        except Exception:
+            continue
+    if not parts:
+        raise ValueError("no splits could be loaded")
+    return concatenate_datasets(parts) if len(parts) > 1 else parts[0]
+
+
 async def load_split(info: DatasetInfo, split: str):
+    if split in ("all", "mix", "*"):
+        return await asyncio.to_thread(_load_all_sync, info)
     return await asyncio.to_thread(_load_sync, info, split)
+
+
+def _split_sizes_sync(info: DatasetInfo) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for name in _split_names_sync(info):
+        try:
+            out[name] = len(_load_sync(info, name))
+        except Exception:
+            continue
+    if len(out) > 1:
+        out["all"] = sum(out.values())
+    return out
+
+
+async def split_sizes(info: DatasetInfo) -> dict[str, int]:
+    return await asyncio.to_thread(_split_sizes_sync, info)
 
 
 def label_names(ds, label_column: str) -> list[str]:

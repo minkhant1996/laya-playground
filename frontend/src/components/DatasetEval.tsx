@@ -99,6 +99,8 @@ export default function DatasetEval({
   const [textCol, setTextCol] = useState("");
   const [labelCol, setLabelCol] = useState("");
   const [split, setSplit] = useState("test");
+  const [splits, setSplits] = useState<Record<string, number>>({});
+  const [splitsLoading, setSplitsLoading] = useState(false);
   const [limit, setLimit] = useState(30);
   const [offset, setOffset] = useState(0);
   const [useAi, setUseAi] = useState(true);
@@ -456,6 +458,46 @@ export default function DatasetEval({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, datasetId, inspect, upload, kg, saved, lib]);
+
+  useEffect(() => {
+    const src = buildSource();
+    if (!src || (src.kind !== "preset" && src.kind !== "hf")) {
+      setSplits({});
+      return;
+    }
+    let alive = true;
+    setSplitsLoading(true);
+    api
+      .splits(src)
+      .then((r) => {
+        if (!alive) return;
+        setSplits(r.splits);
+        const names = Object.keys(r.splits);
+        if (names.length && !r.splits[split]) setSplit(r.splits.test ? "test" : names[0]);
+      })
+      .catch(() => alive && setSplits({}))
+      .finally(() => alive && setSplitsLoading(false));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, datasetId, inspect?.path, inspect?.config, saved?.id]);
+
+  const totalRows =
+    mode === "preset" || mode === "hf"
+      ? splits[split]
+      : mode === "kaggle"
+        ? kg?.size
+        : mode === "upload"
+          ? upload?.size
+          : mode === "saved"
+            ? (saved?.size ?? undefined)
+            : undefined;
+  const maxSamples = totalRows ? Math.max(1, totalRows - offset) : 1000;
+  useEffect(() => {
+    if (totalRows && limit > totalRows) setLimit(totalRows);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalRows]);
 
   const current = datasets.find((d) => d.id === datasetId);
   const hasSource =
@@ -910,25 +952,40 @@ export default function DatasetEval({
           </div>
           {plan && usePlan && <PlanEditor plan={plan} onChange={updatePlan} />}
           <div className="row">
-            {mode !== "upload" && mode !== "kaggle" && mode !== "saved" && (
-              <>
-                <label>split</label>
-                <input
-                  value={split}
-                  onChange={(e) => setSplit(e.target.value)}
-                  style={{ width: 110 }}
-                />
-              </>
-            )}
+            {(mode === "preset" || mode === "hf") && (
+            <>
+              <label>split</label>
+              {Object.keys(splits).length > 0 ? (
+                <select value={split} onChange={(e) => setSplit(e.target.value)} style={{ width: 200 }}>
+                  {Object.entries(splits).map(([name, n]) => (
+                    <option key={name} value={name}>
+                      {name === "all" ? "all splits (mixed)" : name} · {n.toLocaleString()} rows
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input value={split} onChange={(e) => setSplit(e.target.value)} style={{ width: 110 }} placeholder={splitsLoading ? "loading…" : "test"} />
+              )}
+            </>
+          )}
             <label>samples</label>
-            <input
-              type="number"
-              min={1}
-              max={1000}
-              value={limit}
-              onChange={(e) => setLimit(+e.target.value)}
-              style={{ width: 90 }}
-            />
+          <input
+            type="number"
+            min={1}
+            max={maxSamples}
+            value={limit}
+            onChange={(e) => setLimit(Math.min(Math.max(1, +e.target.value || 1), maxSamples))}
+            style={{ width: 90 }}
+          />
+          {totalRows !== undefined && (
+            <span className="small">
+              of {totalRows.toLocaleString()}
+              {offset ? ` (from ${offset})` : ""}
+              <button className="chip" style={{ marginLeft: 6, padding: "1px 7px", fontSize: 11 }} onClick={() => setLimit(maxSamples)} title="Evaluate every remaining row">
+                all
+              </button>
+            </span>
+          )}
             <label>offset</label>
             <input
               type="number"

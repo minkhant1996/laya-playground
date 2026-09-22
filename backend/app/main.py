@@ -261,6 +261,29 @@ async def dataset_library_delete(entry_id: str):
     return {"ok": library.delete(entry_id)}
 
 
+class SplitsRequest(BaseModel):
+    source: DatasetSource
+
+
+@app.post("/api/datasets/splits")
+async def dataset_splits(req: SplitsRequest):
+    """Available splits with row counts for a preset or Hugging Face source ("all" = every split mixed)."""
+    src = req.source
+    if src.kind == "preset":
+        info = dsvc.DATASETS.get(src.dataset_id or "")
+        if not info:
+            raise HTTPException(404, "unknown dataset")
+    elif src.kind == "hf" and src.path:
+        path, cfg = dsvc.parse_hf_ref(src.path)
+        info = DatasetInfo(id=path, name=path, path=path, config=src.config or cfg, text_column="", label_column="", description="")
+    else:
+        return {"splits": {}}
+    try:
+        return {"splits": await dsvc.split_sizes(info)}
+    except Exception as e:
+        raise HTTPException(502, f"could not read splits: {e}")
+
+
 @app.get("/api/datasets/{dataset_id}/labels")
 async def dataset_labels(dataset_id: str, split: str = "test"):
     info = dsvc.DATASETS.get(dataset_id)
