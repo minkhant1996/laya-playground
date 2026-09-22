@@ -180,7 +180,10 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
       <div>
         <section className="panel">
           <h2 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span>Learn about System One · Jev · Laya{sessionId ? '' : ' · new session'}</span>
+            <span>
+              Learn about System One · Jev · Laya{sessionId ? '' : ' · new session'}
+              {uiLoading && <span className="badge warn" style={{ marginLeft: 10 }}>⏳ translating to {lang}… (first time only)</span>}
+            </span>
             <span style={{ textTransform: 'none', letterSpacing: 0, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
               answer in
               <LangPicker
@@ -201,7 +204,6 @@ export default function Learn({ aiEnabled, textModel }: { aiEnabled: boolean; te
             {msgs.length === 0 && (
               <div className="msg assistant">
                 <p style={{ opacity: uiLoading ? 0.6 : 1 }}>{ui.intro}</p>
-                {uiLoading && <div className="small"><span className="step on">translating to {lang}…</span> first time only, then cached</div>}
                 <div className="suggest" style={{ opacity: uiLoading ? 0.6 : 1 }}>
                   {ui.starters.map((s) => (
                     <button key={s} className="chip" onClick={() => ask(s)} disabled={!aiEnabled}>
