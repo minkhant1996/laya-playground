@@ -38,13 +38,13 @@ export default function LangPicker({ value, onChange }: { value: string; onChang
   }
 
   return (
-    <div className="pick" ref={box} style={{ minWidth: 220 }}>
+    <div className="pick langpick" ref={box}>
       <button type="button" className="chip" style={{ padding: '5px 10px', fontSize: 13 }} onClick={() => setOpen((o) => !o)}>
         {current.flag} {current.name}
         {current !== AUTO ? <span className="small"> · {current.native}</span> : <span className="small"> · {current.native}</span>} ▾
       </button>
       {open && (
-        <div className="list" style={{ minWidth: 280 }}>
+        <div className="list" style={{ minWidth: 300, left: 'auto', right: 0 }}>
           <div style={{ padding: 6 }}>
             <input
               ref={input}

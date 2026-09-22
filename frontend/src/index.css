@@ -127,3 +127,6 @@ table.aligned th:not(:first-child), table.aligned td:not(:first-child) { text-al
 .modal .body pre, .msg pre { white-space: pre-wrap; word-break: break-word; }
 .modal .body, .msg { overflow-wrap: anywhere; }
 .badge.warn { color: #ffb454; background: rgba(255,180,84,.14); border: 1px solid rgba(255,180,84,.45); animation: pulse 1.2s ease-in-out infinite; font-weight: 600; text-transform: none; letter-spacing: 0; }
+
+.langpick { display: inline-block; }
+.langpick > button { margin: 0; }
