@@ -238,8 +238,12 @@ async def _resolve_source(req: EvaluateRequest):
     if not text_col or not label_col:
         gt, gl = dsvc.guess_columns(ds.column_names)
         text_col, label_col = text_col or gt, label_col or gl
-    if not text_col or not label_col or text_col not in ds.column_names or label_col not in ds.column_names:
-        raise HTTPException(400, f"set text_column and label_column (columns: {ds.column_names})")
+    if text_col == "__all__":
+        text_col = "__all__"   # state = every other column as a JSON object
+    elif not text_col or text_col not in ds.column_names:
+        raise HTTPException(400, f"set text_column (or use 'all other columns as JSON') and label_column (columns: {ds.column_names})")
+    if not label_col or label_col not in ds.column_names:
+        raise HTTPException(400, f"set label_column (columns: {ds.column_names})")
     return path, ds, text_col, label_col
 
 
@@ -280,11 +284,15 @@ async def _evaluate_events(req: EvaluateRequest):
     correct = 0
     t0 = time.perf_counter()
     for i, ex in enumerate(subset):
-        text = str(ex[text_col])
+        if text_col == "__all__":
+            state: Any = {k: v for k, v in ex.items() if k != label_col}
+            text = json.dumps(state, ensure_ascii=False, default=str)
+        else:
+            state = text = str(ex[text_col])
         gold_raw = ex[label_col]
         gold = ids[int(gold_raw)] if is_int_label and str(gold_raw).lstrip("-").isdigit() and int(gold_raw) < len(ids) else dsvc.to_label_id(str(gold_raw))
         try:
-            res = await laya_service.decide(text, question, engine, shortlist_k)
+            res = await laya_service.decide(state, question, engine, shortlist_k)
         except Exception as e:
             raise HTTPException(500, f"decision error on sample {i + 1}: {e}")
         routing = routing or res.get("routing")

@@ -285,9 +285,10 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
 
         {columns && (
           <div className="row">
-            <label>text column</label>
-            <select value={textCol} onChange={(e) => setTextCol(e.target.value)} style={{ width: 160 }}>
+            <label>text / state column</label>
+            <select value={textCol} onChange={(e) => setTextCol(e.target.value)} style={{ width: 220 }}>
               <option value="">—</option>
+              <option value="__all__">all other columns as JSON</option>
               {columns.map((c) => (
                 <option key={c}>{c}</option>
               ))}
@@ -332,6 +333,9 @@ export default function DatasetEval({ aiEnabled, defaultEngine, typesafeReady }:
           <div className="small" style={{ marginBottom: 2 }}>Decision model</div>
           <EnginePicker value={engine} onChange={setEngine} compact openrouterReady={aiEnabled} typesafeReady={typesafeReady} />
         </div>
+        {textCol === '__all__' && (
+          <div className="small" style={{ marginTop: 6 }}>Each row is sent as a JSON object. Fine for a few readable fields; for purely numeric tables (e.g. fraud features V1…V28) a classical model in the ML playground will do far better.</div>
+        )}
         {labelCount !== undefined && labelCount > 30 && shortlist === 0 && (
           <div className="small" style={{ marginTop: 6 }}>{labelCount} labels: consider a shortlist (e.g. 10) and AI criteria for better zero-shot accuracy.</div>
         )}
