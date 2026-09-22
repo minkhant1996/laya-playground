@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     openrouter_api_key: str = ""
-    openrouter_model: str = "anthropic/claude-sonnet-4.5"
+    openrouter_model: str = "anthropic/claude-sonnet-5"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     hf_token: str = ""
     typesafe_api_key: str = ""

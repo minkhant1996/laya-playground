@@ -129,7 +129,7 @@ export default function Settings({ onChange }: { onChange: () => void }) {
         <section className="panel">
           <h2>JSON preparer model (OpenRouter)</h2>
           <div className="small" style={{ marginBottom: 8 }}>Text model that turns your description into Laya/Jev questions JSON and writes label criteria for datasets.</div>
-          <ModelPicker value={prepModel} onChange={setPrepModel} />
+          <ModelPicker value={prepModel} onChange={setPrepModel} placeholder="search OpenRouter models, e.g. claude sonnet 5, gpt, gemini flash" />
           {skill && (
             <details>
               <summary>Guided by the TypeSafe / Jev agent skill ({skill.sources.length} doc files)</summary>

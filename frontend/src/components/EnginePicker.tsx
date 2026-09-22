@@ -18,7 +18,7 @@ export default function EnginePicker({ value, onChange, compact, typesafeReady, 
           <input type="radio" checked={value.kind === 'laya'} onChange={() => onChange({ kind: 'laya' })} /> Laya (local)
         </label>
         <label>
-          <input type="radio" checked={value.kind === 'openrouter'} onChange={() => onChange({ kind: 'openrouter', model: value.model ?? '' })} /> OpenRouter LLM
+          <input type="radio" checked={value.kind === 'openrouter'} onChange={() => onChange({ kind: 'openrouter', model: value.kind === 'openrouter' ? value.model ?? '' : '' })} /> OpenRouter LLM
           {openrouterReady === false && <span className="small"> (no key)</span>}
         </label>
         <label>
