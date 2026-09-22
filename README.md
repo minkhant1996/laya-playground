@@ -108,28 +108,21 @@ First model load downloads ~2 GB of checkpoints. Without a GPU, evaluation is ro
 
 ## API
 
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/api/health` | backend + OpenRouter status |
-| POST | `/api/predict` | `{state, questions}` → Laya answers |
-| POST | `/api/ai/prepare` | `{description, sample_text?}` → questions JSON via OpenRouter |
-| GET | `/api/datasets` | available HF datasets |
-| GET | `/api/datasets/{id}/labels?split=test` | label names |
-| POST | `/api/datasets/inspect` | `{ref}` HF link/id → configs, splits, columns, label names |
-| POST | `/api/datasets/upload` | multipart `.json/.jsonl/.csv` → `upload_id` + columns |
-| POST | `/api/datasets/evaluate` | `{source:{kind: preset|hf|upload, …}, split, limit, offset, shortlist_k?, use_ai_criteria}` → accuracy + rows |
-| POST | `/api/chat` | `{messages, engine?}` → `{reply, spec, result, explanation}` |
-| POST | `/api/datasets/evaluate/stream` | same body as evaluate; NDJSON events `status/start/row/done/error` |
-| GET | `/api/openrouter/models` | every OpenRouter model with context and prices (cached 10 min) |
-| GET | `/api/usage?days=7` · DELETE | usage totals, breakdowns, recent calls |
-| GET | `/api/learn/docs` · `/api/learn/docs/{file}` | knowledge-hub index and a file's content |
-| POST | `/api/learn/ask` | `{question, history}` → NDJSON `selecting/reading/answering` then `{answer, sources}` |
-| GET | `/api/skill` | sources + distilled guidance from the TypeSafe/Jev skill |
-| PUT | `/api/settings/prefs` | `{openrouter_model?, decision_engine?}` |
-| PUT/DELETE | `/api/settings/typesafe` | TypeSafe (Jev) API key, verified then stored encrypted |
-| GET | `/api/settings` | masked key status |
-| PUT | `/api/settings/openrouter` | `{api_key, model?}` verify with OpenRouter, then store encrypted |
-| DELETE | `/api/settings/openrouter` | remove the UI-saved key |
+All endpoints are under `/api` (interactive docs at http://127.0.0.1:8765/docs).
+
+| Area | Endpoints |
+|---|---|
+| Health / system | `GET /health`, `GET /system` (RAM, VRAM, CPU, Laya device) |
+| Decisions | `POST /predict` `{state, questions, engine?}` |
+| Chat | `POST /chat/stream` (NDJSON stages), `POST /chat`; sessions: `GET/POST /chat/sessions`, `GET/DELETE /chat/sessions/{id}`, `DELETE /chat/sessions` |
+| Learn | `POST /learn/ask` (NDJSON: selecting/reading/answering), `GET /learn/docs`, `GET /learn/docs/{file}`, sessions under `/learn/sessions…`, `GET /learn/i18n?lang=&scope=`, `POST /learn/i18n/warm`, `GET /learn/i18n/status` |
+| Datasets | `GET /datasets`, `POST /datasets/splits`, `POST /datasets/inspect` (HF), `POST /datasets/kaggle/inspect`, `POST /datasets/upload`, `POST /datasets/plan` (AI preparer) |
+| Evaluation | `POST /datasets/evaluate/stream` (NDJSON: status/start/row/done), `POST /datasets/evaluate` |
+| Saved datasets | `GET /datasets/library`, `POST /datasets/library/plan`, `DELETE /datasets/library/{id}`, `DELETE /datasets/library/{id}/plan` |
+| History | `GET/POST /evals`, `GET/DELETE /evals/{id}`, `DELETE /evals` |
+| Models & skill | `GET /openrouter/models`, `GET /skill` |
+| Settings | `GET /settings`, `PUT /settings/prefs`, `PUT/DELETE /settings/openrouter`, `PUT/DELETE /settings/typesafe`, `PUT/DELETE /settings/kaggle` |
+| Usage | `GET /usage?days=`, `DELETE /usage` |
 
 ## Data & privacy
 
