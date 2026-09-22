@@ -6,12 +6,16 @@ import AnswerList from './AnswerList'
 import EnginePicker from './EnginePicker'
 import LangPicker from './LangPicker'
 
-const SUGGESTIONS = [
-  'Is this support email urgent, and which team should handle it? "Hi, we were billed twice for March. Refund it today or we cancel."',
-  'Rate how positive these reviews are, 0 to 4: "Great battery, awful screen."',
-  'Does this message contain a threat to leave? "If this happens again I am switching providers."',
-  'Route this Hindi message to billing / technical / sales: "मेरा भुगतान दो बार कट गया है"',
-]
+const DEFAULT_UI = {
+  intro: 'Hi! Tell me what you want to decide and paste the text, in any language. I will turn it into typed questions, run the decision model, and explain the result.',
+  placeholder: 'Describe what to decide and paste the text…  (Enter to send, Shift+Enter for newline)',
+  starters: [
+    'Is this support email urgent, and which team should handle it? "Hi, we were billed twice for March. Refund it today or we cancel."',
+    'Rate how positive this review is, 0 to 4: "Great battery, awful screen."',
+    'Does this message contain a threat to leave? "If this happens again I am switching providers."',
+    'Classify this message as complaint / praise / question: "Your app is great, thank you!"',
+  ],
+}
 
 const DEFAULT_QUESTIONS: Questions = {
   department: { type: 'choice', instructions: 'Which department should handle this request?', criteria: { billing: 'invoices, payments, refunds', technical: 'bugs, outages, system errors', sales: 'pricing, new contracts', other: 'everything else' } },
@@ -66,6 +70,20 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
   })
   const [manualMs, setManualMs] = useState<number | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
+  const [ui, setUi] = useState(DEFAULT_UI)
+  const [uiLoading, setUiLoading] = useState(false)
+  useEffect(() => {
+    let alive = true
+    setUiLoading(true)
+    api
+      .learnI18n(lang, 'chat')
+      .then((r) => alive && setUi({ intro: r.intro, placeholder: r.placeholder, starters: r.starters }))
+      .catch(() => alive && setUi(DEFAULT_UI))
+      .finally(() => alive && setUiLoading(false))
+    return () => {
+      alive = false
+    }
+  }, [lang])
 
   useEffect(() => {
     setEngine(defaultEngine)
@@ -238,9 +256,9 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
             <div className="chat">
               {msgs.length === 0 && (
                 <div className="msg assistant">
-                  <p>Hi! Tell me what you want to decide and paste the text, in any language. I will turn it into typed questions, run the decision model, and explain the result. Laya routes non-Latin text to its multilingual checkpoint automatically.</p>
-                  <div className="suggest">
-                    {SUGGESTIONS.map((s) => (
+                  <p style={{ opacity: uiLoading ? 0.6 : 1 }}>{ui.intro}</p>
+                  <div className="suggest" style={{ opacity: uiLoading ? 0.6 : 1 }}>
+                    {ui.starters.map((s) => (
                       <button key={s} className="chip" onClick={() => send(s)} disabled={!aiEnabled}>
                         {s.length > 70 ? s.slice(0, 68) + '…' : s}
                       </button>
@@ -276,7 +294,7 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
             </div>
             <div className="composer">
               <textarea
-                placeholder="Describe what to decide and paste the text…  (Enter to send, Shift+Enter for newline)"
+                placeholder={ui.placeholder}
                 value={input}
                 disabled={!aiEnabled || busy}
                 onChange={(e) => setInput(e.target.value)}

@@ -59,39 +59,90 @@ BUILTIN: dict[str, dict[str, Any]] = {
     },
 }
 
+CHAT_BASE: dict[str, Any] = {
+    "intro": "Hi! Tell me what you want to decide and paste the text, in any language. I will turn it into typed questions, run the decision model, and explain the result.",
+    "placeholder": "Describe what to decide and paste the text…  (Enter to send, Shift+Enter for newline)",
+    "starters": [
+        "Is this support email urgent, and which team should handle it? \"Hi, we were billed twice for March. Refund it today or we cancel.\"",
+        "Rate how positive this review is, 0 to 4: \"Great battery, awful screen.\"",
+        "Does this message contain a threat to leave? \"If this happens again I am switching providers.\"",
+        "Classify this message as complaint / praise / question: \"Your app is great, thank you!\"",
+    ],
+}
+
+CHAT_BUILTIN: dict[str, dict[str, Any]] = {
+    "English": CHAT_BASE,
+    "Burmese": {
+        "intro": "မင်္ဂလာပါ။ ဘာကို ဆုံးဖြတ်ချင်သလဲ ပြောပြပြီး စာသားကို ကူးထည့်ပါ၊ ဘာသာစကား မရွေးပါ။ ကျွန်ုပ်က မေးခွန်းအမျိုးအစားများအဖြစ် ပြောင်းပြီး ဆုံးဖြတ်မော်ဒယ်ကို run ကာ ရလဒ်ကို ရှင်းပြပေးပါမည်။",
+        "placeholder": "ဘာဆုံးဖြတ်ချင်သလဲ ရေးပြီး စာသားကို ကူးထည့်ပါ…  (Enter = ပို့ရန်၊ Shift+Enter = လိုင်းအသစ်)",
+        "starters": [
+            "ဒီ support email က အရေးကြီးသလား၊ ဘယ်အဖွဲ့က ကိုင်တွယ်သင့်သလဲ။ \"မတ်လအတွက် နှစ်ကြိမ်ငွေဖြတ်ထားပါတယ်၊ ဒီနေ့ပြန်အမ်းပါ မဟုတ်ရင် ရပ်မယ်။\"",
+            "ဒီ review က ဘယ်လောက်အပြုသဘောဆောင်သလဲ၊ ၀ မှ ၄ အထိ အမှတ်ပေးပါ။ \"ဘက်ထရီကောင်းတယ်၊ မျက်နှာပြင်ဆိုးတယ်။\"",
+            "ဒီစာထဲမှာ ထွက်ခွာမယ်ဆိုတဲ့ ခြိမ်းခြောက်မှု ပါသလား။ \"နောက်တစ်ခါ ဒီလိုဖြစ်ရင် တခြားကို ပြောင်းမယ်။\"",
+            "ဒီစာကို တိုင်ကြားချက် / ချီးကျူးစကား / မေးခွန်း အဖြစ် ခွဲပေးပါ။ \"မင်းတို့ app က အရမ်းကောင်းတယ်၊ ကျေးဇူးပါ!\"",
+        ],
+    },
+    "Thai": {
+        "intro": "สวัสดี! บอกฉันว่าคุณต้องการตัดสินใจอะไรและวางข้อความ ในภาษาใดก็ได้ ฉันจะแปลงเป็นคำถามแบบมีชนิด รันโมเดลตัดสินใจ และอธิบายผลลัพธ์",
+        "placeholder": "อธิบายสิ่งที่ต้องการตัดสินใจและวางข้อความ…  (Enter เพื่อส่ง, Shift+Enter ขึ้นบรรทัดใหม่)",
+        "starters": [
+            "อีเมลซัพพอร์ตนี้เร่งด่วนไหม และทีมไหนควรรับผิดชอบ? \"เราถูกเรียกเก็บเงินซ้ำสองครั้งสำหรับเดือนมีนาคม คืนเงินวันนี้ไม่งั้นเราจะยกเลิก\"",
+            "ให้คะแนนความเป็นบวกของรีวิวนี้ 0 ถึง 4: \"แบตดีมาก แต่จอแย่\"",
+            "ข้อความนี้มีการขู่ว่าจะเลิกใช้ไหม? \"ถ้าเกิดแบบนี้อีก ฉันจะย้ายไปเจ้าอื่น\"",
+            "จัดประเภทข้อความนี้เป็น ร้องเรียน / ชื่นชม / คำถาม: \"แอปของคุณดีมาก ขอบคุณ!\"",
+        ],
+    },
+}
+
 TRANSLATE_PROMPT = """Translate the JSON values below into {lang} (native script). Keep the keys unchanged, keep the
 same number of starters, and keep technical terms exactly as they are: System One, Jev, Laya, LLM,
 choice, score, noul, confidence, confidence-gated routing, speculative fan-out, state, hub.
+Quoted example texts inside starters should be translated too (natural, colloquial), keeping the quotes.
 Respond with ONLY the translated JSON object."""
 
 
-def _cache() -> dict[str, Any]:
+def _cache(scope: str = "learn") -> dict[str, Any]:
+    try:
+        return (json.loads(FILE.read_text()) if FILE.exists() else {}).get(scope, {}) if FILE.exists() else {}
+    except Exception:
+        return {}
+
+
+def _cache_all() -> dict[str, Any]:
     try:
         return json.loads(FILE.read_text()) if FILE.exists() else {}
     except Exception:
         return {}
 
 
-async def strings(lang: str | None) -> dict[str, Any]:
-    if not lang or lang == "Auto" or lang in BUILTIN:
-        return {"lang": lang or "Auto", "cached": True, **BUILTIN.get(lang or "", BASE)}
-    c = _cache()
+def _unused():
+    try:
+        return json.loads(FILE.read_text()) if FILE.exists() else {}
+    except Exception:
+        return {}
+
+
+async def strings(lang: str | None, scope: str = "learn") -> dict[str, Any]:
+    base, builtin = (CHAT_BASE, CHAT_BUILTIN) if scope == "chat" else (BASE, BUILTIN)
+    if not lang or lang == "Auto" or lang in builtin:
+        return {"lang": lang or "Auto", "cached": True, **builtin.get(lang or "", base)}
+    c = _cache(scope)
     if lang in c:
         return {"lang": lang, "cached": True, **c[lang]}
     if not openrouter.get_openrouter_key():
-        return {"lang": lang, "cached": False, "fallback": True, **BASE}
+        return {"lang": lang, "cached": False, "fallback": True, **base}
     try:
         out = await openrouter.chat_messages(
-            [{"role": "system", "content": TRANSLATE_PROMPT.format(lang=lang)}, {"role": "user", "content": json.dumps(BASE, ensure_ascii=False)}],
+            [{"role": "system", "content": TRANSLATE_PROMPT.format(lang=lang)}, {"role": "user", "content": json.dumps(base, ensure_ascii=False)}],
             purpose="i18n", json_mode=True, temperature=0,
         )
-        data = {"intro": str(out.get("intro") or BASE["intro"]), "placeholder": str(out.get("placeholder") or BASE["placeholder"]),
-                "starters": [str(x) for x in (out.get("starters") or BASE["starters"])][: len(BASE["starters"])]}
+        data = {"intro": str(out.get("intro") or base["intro"]), "placeholder": str(out.get("placeholder") or base["placeholder"]),
+                "starters": [str(x) for x in (out.get("starters") or base["starters"])][: len(base["starters"])]}
     except Exception:
-        return {"lang": lang, "cached": False, "fallback": True, **BASE}
+        return {"lang": lang, "cached": False, "fallback": True, **base}
     with _lock:
-        c = _cache()
-        c[lang] = data
+        allc = _cache_all()
+        allc.setdefault(scope, {})[lang] = data
         FILE.parent.mkdir(parents=True, exist_ok=True)
-        FILE.write_text(json.dumps(c, ensure_ascii=False, indent=1))
+        FILE.write_text(json.dumps(allc, ensure_ascii=False, indent=1))
     return {"lang": lang, "cached": False, **data}

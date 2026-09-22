@@ -639,11 +639,12 @@ async def learn_ask(req: LearnRequest):
 
 
 @app.get("/api/learn/i18n")
-async def learn_i18n(lang: str = "Auto"):
-    """Intro text, placeholder and starter questions in the chosen language (translated once, cached)."""
+async def learn_i18n(lang: str = "Auto", scope: str = "learn"):
+    """Intro text, placeholder and starter prompts in the chosen language (translated once, cached).
+    scope = learn | chat"""
     from . import i18n
 
-    return await i18n.strings(lang)
+    return await i18n.strings(lang, "chat" if scope == "chat" else "learn")
 
 
 @app.get("/api/learn/sessions")
