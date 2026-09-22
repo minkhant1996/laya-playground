@@ -117,6 +117,7 @@ export default function DatasetEval({
     elapsed: number;
     eta: number;
     avg_ms?: number;
+    concurrency?: number;
   } | null>(null);
   const [loadInfo, setLoadInfo] = useState<string>("");
   const [liveRows, setLiveRows] = useState<EvalRow[]>([]);
@@ -360,6 +361,7 @@ export default function DatasetEval({
               elapsed: ev.elapsed,
               eta: ev.eta,
               avg_ms: ev.avg_ms,
+              concurrency: ev.concurrency,
             });
             setLiveRows((r) => [ev.row, ...r].slice(0, 12));
           } else if (ev.type === "done") {
@@ -1122,7 +1124,7 @@ export default function DatasetEval({
                           ETA <b>{live.eta}s</b>
                         </span>
                         <span>
-                          avg per query{" "}
+                          avg request{" "}
                           <b>
                             {live.avg_ms !== undefined
                               ? live.avg_ms >= 1000
@@ -1131,6 +1133,18 @@ export default function DatasetEval({
                               : "—"}
                           </b>
                         </span>
+                        {live.i > 0 && (
+                          <span title="Wall-clock time per completed sample, parallel requests included">
+                            effective{" "}
+                            <b>
+                              {(live.elapsed / live.i) * 1000 >= 1000
+                                ? `${(live.elapsed / live.i).toFixed(2)} s`
+                                : `${((live.elapsed / live.i) * 1000).toFixed(0)} ms`}
+                              /sample
+                            </b>
+                            {live.concurrency && live.concurrency > 1 ? ` · ${live.concurrency} in parallel` : ""}
+                          </span>
+                        )}
                       </>
                     )}
                   </>

@@ -506,47 +506,71 @@ async def _evaluate_events(req: EvaluateRequest):
     abs_err = 0.0
     t0 = time.perf_counter()
     query_ms_total = 0.0
-    for i, ex in enumerate(subset):
+
+    # Laya (local, CPU/GPU bound) runs sequentially; hosted Jev is API bound, so run several in flight.
+    concurrency = 1 if engine.get("kind") == "laya" else 6
+    sem = asyncio.Semaphore(concurrency)
+
+    async def one(i: int, ex: dict[str, Any]):
         state, text = make_state(ex)
-        gv = gold_value(ex[label_col])
-        mapped = label_map.get(gv, label_map.get(dsvc.to_label_id(gv), gv))
-        tq = time.perf_counter()
-        try:
-            res = await laya_service.decide(state, question, engine, shortlist_k)
-        except Exception as e:
-            raise HTTPException(500, f"decision error on sample {i + 1}: {e}")
-        query_ms = (time.perf_counter() - tq) * 1000
-        query_ms_total += query_ms
-        routing = routing or res.get("routing")
-        ans = (res.get("answers") or {}).get("q", {})
-        raw: float | None = None
-        if qtype == "choice":
-            pred, conf = laya_service.extract_choice(res, "q")
-            gold = str(mapped)
-            ok = pred == gold
-        elif qtype == "score":
-            raw = float(ans.get("score") or 0)
-            pred = str(int(round(raw)))
-            gold = str(int(mapped)) if str(mapped).lstrip("-").isdigit() else str(mapped)
-            conf = ans.get("confidence")
-            ok = pred == gold
-            if gold.lstrip("-").isdigit():
-                abs_err += abs(raw - int(gold))
-        else:
-            raw = float(ans.get("noul") or 0)
-            pred = "yes" if raw >= 0.5 else "no"
-            gold = "yes" if (mapped is True or str(mapped).lower() in ("true", "yes", "1")) else "no"
-            conf = max(raw, 1 - raw)
-            ok = pred == gold
-        correct += int(ok)
-        per[gold]["n"] += 1
-        per[gold]["correct"] += int(ok)
-        row = EvaluateRow(text=text, gold=gold, pred=pred, confidence=conf, correct=ok, raw=raw, ms=round(query_ms, 1))
-        rows.append(row)
-        elapsed = time.perf_counter() - t0
-        avg_ms = query_ms_total / (i + 1)
-        yield {"type": "row", "i": i + 1, "n": n_total, "row": row.model_dump(), "accuracy": correct / (i + 1),
-               "elapsed": round(elapsed, 1), "eta": round(avg_ms / 1000 * (n_total - i - 1), 1), "avg_ms": round(avg_ms, 1), "query_ms": round(query_ms, 1)}
+        async with sem:
+            tq = time.perf_counter()
+            try:
+                res = await laya_service.decide(state, question, engine, shortlist_k)
+            except Exception as e:
+                raise HTTPException(500, f"decision error on sample {i + 1}: {e}")
+            return ex, text, res, (time.perf_counter() - tq) * 1000
+
+    examples = list(subset)
+    tasks = [asyncio.create_task(one(i, ex)) for i, ex in enumerate(examples)] if concurrency > 1 else None
+    if concurrency > 1:
+        yield {"type": "status", "message": f"running {n_total} samples with {concurrency} parallel requests"}
+
+    try:
+        for i, ex0 in enumerate(examples):
+            if tasks:
+                ex, text, res, query_ms = await tasks[i]
+            else:
+                ex, text, res, query_ms = await one(i, ex0)
+            query_ms_total += query_ms
+            gv = gold_value(ex[label_col])
+            mapped = label_map.get(gv, label_map.get(dsvc.to_label_id(gv), gv))
+            routing = routing or res.get("routing")
+            ans = (res.get("answers") or {}).get("q", {})
+            raw: float | None = None
+            if qtype == "choice":
+                pred, conf = laya_service.extract_choice(res, "q")
+                gold = str(mapped)
+                ok = pred == gold
+            elif qtype == "score":
+                raw = float(ans.get("score") or 0)
+                pred = str(int(round(raw)))
+                gold = str(int(mapped)) if str(mapped).lstrip("-").isdigit() else str(mapped)
+                conf = ans.get("confidence")
+                ok = pred == gold
+                if gold.lstrip("-").isdigit():
+                    abs_err += abs(raw - int(gold))
+            else:
+                raw = float(ans.get("noul") or 0)
+                pred = "yes" if raw >= 0.5 else "no"
+                gold = "yes" if (mapped is True or str(mapped).lower() in ("true", "yes", "1")) else "no"
+                conf = max(raw, 1 - raw)
+                ok = pred == gold
+            correct += int(ok)
+            per[gold]["n"] += 1
+            per[gold]["correct"] += int(ok)
+            row = EvaluateRow(text=text, gold=gold, pred=pred, confidence=conf, correct=ok, raw=raw, ms=round(query_ms, 1))
+            rows.append(row)
+            elapsed = time.perf_counter() - t0
+            avg_ms = query_ms_total / (i + 1)                      # mean per-request latency
+            throughput_s = elapsed / (i + 1)                       # wall-clock per completed sample (parallelism included)
+            yield {"type": "row", "i": i + 1, "n": n_total, "row": row.model_dump(), "accuracy": correct / (i + 1),
+                   "elapsed": round(elapsed, 1), "eta": round(throughput_s * (n_total - i - 1), 1), "avg_ms": round(avg_ms, 1),
+                   "query_ms": round(query_ms, 1), "concurrency": concurrency}
+    finally:
+        if tasks:
+            for t in tasks:
+                t.cancel()
 
     n = len(rows)
     extra = {"mae": abs_err / n} if qtype == "score" and n else {}
