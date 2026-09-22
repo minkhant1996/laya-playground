@@ -541,6 +541,7 @@ async def delete_kaggle():
 class LearnRequest(BaseModel):
     question: str = PField(min_length=1, max_length=4000)
     history: list[ChatMessage] = []
+    language: str | None = PField(default=None, max_length=40, pattern=r"^[A-Za-z \-()]*$")
 
 
 @app.get("/api/learn/docs")
@@ -570,7 +571,7 @@ async def learn_ask(req: LearnRequest):
 
     async def gen():
         try:
-            async for ev in knowledge.ask(req.question, [m.model_dump() for m in req.history]):
+            async for ev in knowledge.ask(req.question, [m.model_dump() for m in req.history], req.language):
                 yield json.dumps(ev, ensure_ascii=False) + "\n"
         except Exception as e:
             yield json.dumps({"type": "error", "message": str(e)}) + "\n"

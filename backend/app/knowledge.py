@@ -67,7 +67,7 @@ def _keyword_fallback(question: str) -> list[str]:
     return [f for s, f in scored[:2] if s > 0] or ["introduction.md"]
 
 
-async def ask(question: str, history: list[dict[str, str]] | None = None) -> AsyncIterator[dict[str, Any]]:
+async def ask(question: str, history: list[dict[str, str]] | None = None, language: str | None = None) -> AsyncIterator[dict[str, Any]]:
     """Yields status events, then {"type": "done", "answer", "sources"}."""
     docs = index()
     if not docs:
@@ -95,7 +95,8 @@ async def ask(question: str, history: list[dict[str, str]] | None = None) -> Asy
     yield {"type": "status", "stage": "reading", "message": "reading " + ", ".join(d["title"] for d in chosen), "files": files, "reason": reason}
 
     context = "\n\n".join(f"===== [{i + 1}] {d['title']} ({d['url']}) =====\n{read(d['file'])}" for i, d in enumerate(chosen))
-    msgs: list[dict[str, str]] = [{"role": "system", "content": ANSWER_PROMPT + "\n\nDOCUMENTS:\n" + context}]
+    lang_rule = f"\n\nOUTPUT LANGUAGE OVERRIDE: the user chose '{language}'. Always answer in {language} (native script), whatever language the question is in." if language and language.lower() != "auto" else ""
+    msgs: list[dict[str, str]] = [{"role": "system", "content": ANSWER_PROMPT + lang_rule + "\n\nDOCUMENTS:\n" + context}]
     for m in (history or [])[-6:]:
         if m.get("role") in ("user", "assistant") and m.get("content"):
             msgs.append({"role": m["role"], "content": m["content"]})

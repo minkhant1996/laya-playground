@@ -93,8 +93,8 @@ export const api = {
   plan: (source: DatasetSource, split: string) => req<PlanResult>('/datasets/plan', { method: 'POST', body: JSON.stringify({ source, split }) }),
   learnDocs: () => req<LearnDoc[]>('/learn/docs'),
   learnDoc: (file: string) => req<{ file: string; content: string }>(`/learn/docs/${file}`),
-  learnAsk: async (question: string, history: { role: 'user' | 'assistant'; content: string }[], onStatus: (stage: string, message: string) => void) => {
-    const r = await fetch('/api/learn/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, history }) })
+  learnAsk: async (question: string, history: { role: 'user' | 'assistant'; content: string }[], onStatus: (stage: string, message: string) => void, language?: string) => {
+    const r = await fetch('/api/learn/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, history, language }) })
     if (!r.ok || !r.body) throw new Error((await r.json().catch(() => ({}))).detail ?? r.statusText)
     const reader = r.body.getReader()
     const dec = new TextDecoder()
