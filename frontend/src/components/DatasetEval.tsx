@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import EnginePicker from "./EnginePicker";
+import EnginePicker, { engineLabel } from "./EnginePicker";
 import EvalTable from "./EvalTable";
 import PlanEditor from "./PlanEditor";
 import CompareView from "./CompareView";
@@ -21,6 +21,14 @@ import type {
 } from "../types";
 
 type Mode = "preset" | "hf" | "upload" | "kaggle" | "saved";
+
+function engineLabelFromRouting(m: string): string {
+  if (m.startsWith("jev:")) return `Jev (${m.slice(4)})`;
+  if (m.startsWith("openjev:"))
+    return `openjev ${m.slice(8).replace("qwen3.5-", "").replace("-nli", "")}`;
+  if (m === "jev-omni") return "Jev-Omni";
+  return `Laya (${m})`;
+}
 
 export default function DatasetEval({
   aiEnabled,
@@ -136,8 +144,6 @@ export default function DatasetEval({
     loadLib();
     loadHistory();
   }, []);
-  const engineLabel = (e: Engine) =>
-    e.kind === "laya" ? "Laya (local)" : `Jev (${e.model ?? "jev-1.13"})`;
   const sourceLabel = () =>
     mode === "preset"
       ? (datasets.find((d) => d.id === datasetId)?.name ?? datasetId)
@@ -403,33 +409,35 @@ export default function DatasetEval({
     return r;
   };
 
+  const [compareWith, setCompareWith] = useState<Engine>({
+    kind: "jev",
+    model: "jev-1.13",
+  });
   async function compareModels() {
     setCompare(null);
-    const jev: Engine = {
-      kind: "jev",
-      model: engine.kind === "jev" ? engine.model : "jev-1.13",
-    };
-    setCompareStage("1/2 · Laya (local)");
-    const a = await runWith({ kind: "laya" });
+    const a0 = engine;
+    const b0 = compareWith;
+    setCompareStage(`1/2 · ${engineLabel(a0)}`);
+    const a = await runWith(a0);
     if (!a) {
       setCompareStage("");
       return;
     }
-    setCompareStage("2/2 · Jev via OpenRouter");
-    const b = await runWith(jev);
+    setCompareStage(`2/2 · ${engineLabel(b0)}`);
+    const b = await runWith(b0);
     setCompareStage("");
     if (b) {
       setCompare({ a, b });
       api
         .evalSave({
           kind: "compare",
-          title: `${sourceLabel()} · Laya ${(a.accuracy * 100).toFixed(1)}% vs Jev ${(b.accuracy * 100).toFixed(1)}% (${a.n})`,
+          title: `${sourceLabel()} · ${engineLabel(a0)} ${(a.accuracy * 100).toFixed(1)}% vs ${engineLabel(b0)} ${(b.accuracy * 100).toFixed(1)}% (${a.n})`,
           dataset: sourceLabel(),
-          engine: "Laya vs Jev",
+          engine: `${engineLabel(a0)} vs ${engineLabel(b0)}`,
           result: a,
           result_b: b,
-          label_a: "Laya (local)",
-          label_b: `Jev (${b.routing?.model?.replace("jev:", "") ?? "jev-1.13"})`,
+          label_a: engineLabel(a0),
+          label_b: engineLabel(b0),
         })
         .then(loadHistory)
         .catch(() => undefined);
@@ -477,7 +485,8 @@ export default function DatasetEval({
         if (!alive) return;
         setSplits(r.splits);
         const names = Object.keys(r.splits);
-        if (names.length && !r.splits[split]) setSplit(r.splits.test ? "test" : names[0]);
+        if (names.length && !r.splits[split])
+          setSplit(r.splits.test ? "test" : names[0]);
       })
       .catch(() => alive && setSplits({}))
       .finally(() => alive && setSplitsLoading(false));
@@ -957,39 +966,58 @@ export default function DatasetEval({
           {plan && usePlan && <PlanEditor plan={plan} onChange={updatePlan} />}
           <div className="row">
             {(mode === "preset" || mode === "hf") && (
-            <>
-              <label>split</label>
-              {Object.keys(splits).length > 0 ? (
-                <select value={split} onChange={(e) => setSplit(e.target.value)} style={{ width: 200 }}>
-                  {Object.entries(splits).map(([name, n]) => (
-                    <option key={name} value={name}>
-                      {name === "all" ? "all splits (mixed)" : name} · {n.toLocaleString()} rows
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input value={split} onChange={(e) => setSplit(e.target.value)} style={{ width: 110 }} placeholder={splitsLoading ? "loading…" : "test"} />
-              )}
-            </>
-          )}
+              <>
+                <label>split</label>
+                {Object.keys(splits).length > 0 ? (
+                  <select
+                    value={split}
+                    onChange={(e) => setSplit(e.target.value)}
+                    style={{ width: 200 }}
+                  >
+                    {Object.entries(splits).map(([name, n]) => (
+                      <option key={name} value={name}>
+                        {name === "all" ? "all splits (mixed)" : name} ·{" "}
+                        {n.toLocaleString()} rows
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={split}
+                    onChange={(e) => setSplit(e.target.value)}
+                    style={{ width: 110 }}
+                    placeholder={splitsLoading ? "loading…" : "test"}
+                  />
+                )}
+              </>
+            )}
             <label>samples</label>
-          <input
-            type="number"
-            min={1}
-            max={maxSamples}
-            value={limit}
-            onChange={(e) => setLimit(Math.min(Math.max(1, +e.target.value || 1), maxSamples))}
-            style={{ width: 90 }}
-          />
-          {totalRows !== undefined && (
-            <span className="small">
-              of {totalRows.toLocaleString()}
-              {offset ? ` (from ${offset})` : ""}
-              <button className="chip" style={{ marginLeft: 6, padding: "1px 7px", fontSize: 11 }} onClick={() => setLimit(maxSamples)} title="Evaluate every remaining row">
-                all
-              </button>
-            </span>
-          )}
+            <input
+              type="number"
+              min={1}
+              max={maxSamples}
+              value={limit}
+              onChange={(e) =>
+                setLimit(
+                  Math.min(Math.max(1, +e.target.value || 1), maxSamples),
+                )
+              }
+              style={{ width: 90 }}
+            />
+            {totalRows !== undefined && (
+              <span className="small">
+                of {totalRows.toLocaleString()}
+                {offset ? ` (from ${offset})` : ""}
+                <button
+                  className="chip"
+                  style={{ marginLeft: 6, padding: "1px 7px", fontSize: 11 }}
+                  onClick={() => setLimit(maxSamples)}
+                  title="Evaluate every remaining row"
+                >
+                  all
+                </button>
+              </span>
+            )}
             <label>offset</label>
             <input
               type="number"
@@ -1046,17 +1074,40 @@ export default function DatasetEval({
             </button>
             <button
               className="ghost"
-              disabled={busy || !aiEnabled || !ready}
+              disabled={busy || !ready}
               onClick={compareModels}
               title={
                 notReadyWhy ||
-                "Run the same samples through Laya (local) and Jev (via OpenRouter) and compare accuracy, speed and agreement"
+                "Run the same samples through the selected engine and the one chosen on the right, then compare accuracy, speed and agreement"
               }
             >
-              {compareStage
-                ? `Comparing ${compareStage}`
-                : "⚖ Compare Laya vs Jev"}
+              {compareStage ? `Comparing ${compareStage}` : "⚖ Compare with…"}
             </button>
+            <select
+              value={`${compareWith.kind}:${compareWith.model ?? ""}`}
+              onChange={(e) => {
+                const [kind, model] = e.target.value.split(":");
+                setCompareWith({
+                  kind: kind as Engine["kind"],
+                  model: model || undefined,
+                });
+              }}
+              style={{ width: 230 }}
+              title="Second engine for the comparison"
+            >
+              <option value="laya:">Laya (local)</option>
+              <option value="jev:jev-1.13">Jev jev-1.13 (OpenRouter)</option>
+              <option value="jev:jev-latest">
+                Jev jev-latest (OpenRouter)
+              </option>
+              <option value="openjev:qwen3.5-0.8b-nli-v2s-long">
+                openjev 0.8B (local)
+              </option>
+              <option value="openjev:qwen3.5-4b-nli-v2">
+                openjev 4B v2 (local)
+              </option>
+              <option value="jev_omni:">Jev-Omni (local GPU)</option>
+            </select>
             {busy && (
               <button
                 className="ghost"
@@ -1144,19 +1195,26 @@ export default function DatasetEval({
                                 : `${((live.elapsed / live.i) * 1000).toFixed(0)} ms`}
                               /sample
                             </b>
-                            {live.concurrency && live.concurrency > 1 ? ` · ${live.concurrency} in parallel` : ""}
+                            {live.concurrency && live.concurrency > 1
+                              ? ` · ${live.concurrency} in parallel`
+                              : ""}
                           </span>
                         )}
                         {live.mem && (
                           <span title="Backend process memory while Laya runs (— for Jev, which runs in the cloud)">
                             RAM <b>{(live.mem.ram_mb / 1024).toFixed(2)} GB</b>
                             {" · VRAM "}
-                            <b>{live.mem.vram_mb != null ? `${(live.mem.vram_mb / 1024).toFixed(2)} GB` : "—"}</b>
+                            <b>
+                              {live.mem.vram_mb != null
+                                ? `${(live.mem.vram_mb / 1024).toFixed(2)} GB`
+                                : "—"}
+                            </b>
                           </span>
                         )}
                         {!live.mem && engine.kind === "jev" && (
                           <span>
-                            RAM <b>—</b> · VRAM <b>—</b> <span className="small">(cloud)</span>
+                            RAM <b>—</b> · VRAM <b>—</b>{" "}
+                            <span className="small">(cloud)</span>
                           </span>
                         )}
                       </>
@@ -1181,8 +1239,8 @@ export default function DatasetEval({
           <CompareView
             a={compare.a}
             b={compare.b}
-            labelA="Laya (local)"
-            labelB={`Jev (${compare.b.routing?.model?.replace("jev:", "") ?? "jev-1.13"})`}
+            labelA={engineLabelFromRouting(compare.a.routing?.model ?? "")}
+            labelB={engineLabelFromRouting(compare.b.routing?.model ?? "")}
           />
         )}
         {result && !compare && (
@@ -1228,9 +1286,15 @@ export default function DatasetEval({
                       : `${result.extra_metrics.avg_query_ms.toFixed(0)} ms`}
                   </div>
                   <div className="small">
-                    {result.extra_metrics.ram_peak_mb !== undefined ? `RAM peak ${(result.extra_metrics.ram_peak_mb / 1024).toFixed(2)} GB` : ''}
-                    {result.extra_metrics.vram_peak_mb !== undefined ? ` · VRAM ${(result.extra_metrics.vram_peak_mb / 1024).toFixed(2)} GB` : ''}
-                    {result.extra_metrics.ram_peak_mb !== undefined ? ' · ' : ''}
+                    {result.extra_metrics.ram_peak_mb !== undefined
+                      ? `RAM peak ${(result.extra_metrics.ram_peak_mb / 1024).toFixed(2)} GB`
+                      : ""}
+                    {result.extra_metrics.vram_peak_mb !== undefined
+                      ? ` · VRAM ${(result.extra_metrics.vram_peak_mb / 1024).toFixed(2)} GB`
+                      : ""}
+                    {result.extra_metrics.ram_peak_mb !== undefined
+                      ? " · "
+                      : ""}
                     {result.extra_metrics.total_query_s.toFixed(1)}s total
                     {result.extra_metrics.model_load_s
                       ? ` · +${result.extra_metrics.model_load_s.toFixed(1)}s model load`

@@ -1,5 +1,6 @@
 import type { EvalResult } from '../types'
 
+const isCloud = (r: EvalResult) => (r.routing?.model ?? '').startsWith('jev:')
 const mem = (mb?: number) => (mb === undefined ? '—' : `${(mb / 1024).toFixed(2)} GB`)
 const ms = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(2)} s` : `${v.toFixed(0)} ms`)
 
@@ -80,8 +81,8 @@ export default function CompareView({ a, b, labelA, labelB }: { a: EvalResult; b
           <Row k="RAM · backend peak" va={mem(a.extra_metrics?.ram_peak_mb)} vb={mem(b.extra_metrics?.ram_peak_mb)} />
           <Row k="VRAM · peak" va={mem(a.extra_metrics?.vram_peak_mb)} vb={mem(b.extra_metrics?.vram_peak_mb)} />
           <Row k="checkpoint" va={a.routing?.model ?? '—'} vb={b.routing?.model ?? '—'} />
-          <Row k="cost" va="free (local)" vb="OpenRouter, see Usage" />
-          <Row k="runs on" va="your machine (CPU/GPU)" vb="TypeSafe cloud via OpenRouter" />
+          <Row k="cost" va={isCloud(a) ? 'OpenRouter, see Usage' : 'free (local)'} vb={isCloud(b) ? 'OpenRouter, see Usage' : 'free (local)'} />
+          <Row k="runs on" va={isCloud(a) ? 'TypeSafe cloud via OpenRouter' : 'your machine'} vb={isCloud(b) ? 'TypeSafe cloud via OpenRouter' : 'your machine'} />
         </tbody>
       </table>
       <div className="scroll" style={{ maxHeight: 520 }}>

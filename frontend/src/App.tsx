@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, settingsApi } from './api'
 import type { Engine } from './types'
+import { engineLabel } from './components/EnginePicker'
 import Playground from './components/Playground'
 import DatasetEval from './components/DatasetEval'
 import Settings from './components/Settings'
@@ -28,7 +29,7 @@ export default function App() {
         <h1>System One Playground</h1>
         <span className="status">
           {health
-            ? `backend ok · text model: ${health.openrouter_configured ? health.openrouter_model : 'OpenRouter not configured'} · decisions: ${engine.kind === 'laya' ? 'Laya (local)' : engine.model}`
+            ? `backend ok · text model: ${health.openrouter_configured ? health.openrouter_model : 'OpenRouter not configured'} · decisions: ${engineLabel(engine)}`
             : 'backend offline'}
           {health && <SystemStats compact />}
         </span>

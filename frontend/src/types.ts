@@ -98,7 +98,7 @@ export interface UploadResult {
 }
 
 export interface Engine {
-  kind: 'laya' | 'jev'
+  kind: 'laya' | 'jev' | 'openjev' | 'jev_omni'
   model?: string | null
 }
 
@@ -281,4 +281,12 @@ export interface SystemInfo {
   note: string | null
   free_mb: number
   laya_min_free_mb: number
+}
+
+export interface EnginesInfo {
+  laya: { label: string; loaded: boolean; available: boolean; why: string; url: string; ram_mb: number }
+  jev: { label: string; available: boolean; why: string; url: string }
+  openjev: { label: string; loaded: boolean; available: boolean; url: string; license: string; variants: Record<string, { label: string; ram_mb: number; vram_mb: number; available: boolean }> }
+  jev_omni: { label: string; loaded: boolean; available: boolean; why: string; url: string; license: string; vram_mb: number }
+  free_mb: number
 }

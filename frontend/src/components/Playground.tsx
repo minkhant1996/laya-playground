@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import type { ChatMsg, ChatSessionSummary, Engine, PredictResult, Question, Questions, QuestionType } from '../types'
 import AnswerList from './AnswerList'
-import EnginePicker from './EnginePicker'
+import EnginePicker, { engineLabel } from './EnginePicker'
 import { useConfirm } from './ConfirmDialog'
 import LangPicker from './LangPicker'
 
@@ -155,7 +155,7 @@ export default function Playground({ aiEnabled, defaultEngine, typesafeReady }: 
     setError('')
     setBusy(true)
     setManualMs(null)
-    const label = engine.kind === 'laya' ? 'Laya (local)' : `Jev (${engine.model ?? 'jev-1.13'} via OpenRouter)`
+    const label = engineLabel(engine)
     setManualStatus(`deciding with ${label}…${engine.kind === 'laya' && !advResult ? ' (first call loads the model, ~30 s)' : ''}`)
     const t0 = performance.now()
     try {

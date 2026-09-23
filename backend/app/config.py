@@ -38,4 +38,6 @@ def get_decision_engine() -> dict:
         eng["model"] = get_openrouter_model()
     if eng.get("kind") == "jev" and not eng.get("model"):
         eng["model"] = "jev-1.13"
+    if eng.get("kind") == "openjev" and not eng.get("model"):
+        eng["model"] = "qwen3.5-0.8b-nli-v2s-long"
     return eng

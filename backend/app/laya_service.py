@@ -164,5 +164,13 @@ async def decide(state: Any, questions: dict[str, Any], engine: dict[str, Any] |
     if engine.get("kind") == "openrouter":
         return await openrouter.decide(state, questions, engine["model"])
     if engine.get("kind") == "jev":
-        return await openrouter.jev_decide(state, questions, engine.get("model") or "jev-latest")
+        return await openrouter.jev_decide(state, questions, engine.get("model") or "jev-1.13")
+    if engine.get("kind") == "openjev":
+        from .engines import openjev
+
+        return await openjev.decide(state, questions, engine.get("model"))
+    if engine.get("kind") == "jev_omni":
+        from .engines import jev_omni
+
+        return await jev_omni.decide(state, questions)
     return await predict(state, questions, shortlist_k)

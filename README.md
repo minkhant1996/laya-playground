@@ -1,8 +1,10 @@
 # System One Playground
 
 A local web app for **System One decision models**: [Laya](https://huggingface.co/convaiinnovations/laya)
-(open weights, runs on your machine) and TypeSafe's [Jev](https://openrouter.ai/typesafe/jev-1.13)
-(via OpenRouter). Both take a *state* plus typed *questions* and return calibrated answers instead of
+(open weights, runs on your machine), TypeSafe's [Jev](https://openrouter.ai/typesafe/jev-1.13)
+(via OpenRouter), and two community open-weight Jev-style models, [openjev](https://huggingface.co/AlexWortega/openjev)
+(Qwen3.5 NLI cross-encoder, MIT, CPU-friendly 0.8B up to 35B) and [Jev-Omni](https://huggingface.co/akhilaaa3/Jev-Omni)
+(Gemma 4 12B multimodal, Apache-2.0, NVIDIA GPU with ~24 GB VRAM). Both take a *state* plus typed *questions* and return calibrated answers instead of
 text. FastAPI + scikit backend, Vite + React + TypeScript frontend, Docker ready. MIT licensed.
 
 ## What you can do
@@ -42,6 +44,17 @@ text. FastAPI + scikit backend, Vite + React + TypeScript frontend, Docker ready
 - Answers in the question's language or a chosen one; intro and starter questions are localized (built-in
   for several languages, translated once and cached for the rest; a background job can pre-translate all).
 - Learn sessions are saved and deletable like chats.
+
+**Decision engines** (Settings default, overridable per chat / eval; `GET /api/engines` reports availability)
+
+| Engine | Runs | Needs | Notes |
+|---|---|---|---|
+| Laya | local CPU/GPU | ~3 GB RAM | 3 checkpoints, multilingual routing |
+| Jev jev-1.13 / jev-latest | TypeSafe cloud via OpenRouter | OpenRouter key | $0.042 / 1M input tokens; 6 requests in parallel during eval |
+| openjev 0.8B / 4B v2 / 35B-A3B | local CPU/GPU | ~2.5 / ~10 / ~75 GB | typed questions mapped onto NLI entailment ("The correct answer is: …"); ~1.8 s per call for 0.8B on CPU |
+| Jev-Omni | local NVIDIA GPU | ~24 GB VRAM, ~24 GB download | one call per question; multimodal in the model, text used here |
+
+The **Compare with…** button runs any two engines on the same samples.
 
 **Settings**
 - OpenRouter key (verified, then stored encrypted; never returned to the browser), optional TypeSafe key

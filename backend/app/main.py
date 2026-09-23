@@ -49,6 +49,8 @@ async def predict(req: PredictRequest) -> dict[str, Any]:
         return await laya_service.decide(req.state, questions, req.engine.model_dump() if req.engine else None)
     except laya_service.NotEnoughMemory as e:
         raise HTTPException(507, str(e))
+    except RuntimeError as e:
+        raise HTTPException(507 if "GPU" in str(e) or "RAM" in str(e) else 500, f"decision error: {e}")
     except Exception as e:  # surface model errors to the UI
         raise HTTPException(500, f"decision error: {e}")
 
@@ -486,6 +488,26 @@ async def _evaluate_events(req: EvaluateRequest):
     yield {"type": "start", "n": n_total, "labels": ids, "criteria": criteria, "engine": engine, "question_type": qtype}
 
     load_s = 0.0
+    if engine.get("kind") == "openjev":
+        from .engines import openjev
+
+        if not openjev.is_loaded():
+            yield {"type": "status", "stage": "loading", "message": f"loading openjev {engine.get('model') or openjev.DEFAULT_VARIANT} (first use)…"}
+            try:
+                load_s = await openjev.ensure_loaded(engine.get("model"))
+            except Exception as e:
+                raise HTTPException(507, str(e))
+            yield {"type": "status", "stage": "loaded", "message": f"openjev ready in {load_s:.1f}s", "load_seconds": round(load_s, 1)}
+    if engine.get("kind") == "jev_omni":
+        from .engines import jev_omni
+
+        if not jev_omni.is_loaded():
+            yield {"type": "status", "stage": "loading", "message": "loading Jev-Omni (12B, first use, needs CUDA)…"}
+            try:
+                load_s = await jev_omni.ensure_loaded()
+            except Exception as e:
+                raise HTTPException(507, str(e))
+            yield {"type": "status", "stage": "loaded", "message": f"Jev-Omni ready in {load_s:.1f}s", "load_seconds": round(load_s, 1)}
     if engine.get("kind") == "laya" and not laya_service.is_loaded():
         try:
             laya_service.check_memory_to_load()
@@ -516,11 +538,11 @@ async def _evaluate_events(req: EvaluateRequest):
     # Laya (local, CPU/GPU bound) runs sequentially; hosted Jev is API bound, so run several in flight.
     from . import sysinfo
 
-    track_mem = engine.get("kind") == "laya"
+    track_mem = engine.get("kind") in ("laya", "openjev", "jev_omni")
     mem0 = sysinfo.quick_mem() if track_mem else None
     peak_rss = mem0["rss_mb"] if mem0 else 0.0
     peak_vram = mem0["vram_mb"] if mem0 else None
-    concurrency = 1 if engine.get("kind") == "laya" else 6
+    concurrency = 6 if engine.get("kind") == "jev" else 1
     sem = asyncio.Semaphore(concurrency)
 
     async def one(i: int, ex: dict[str, Any]):
@@ -636,6 +658,30 @@ async def evaluate_stream(req: EvaluateRequest):
             yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
     return StreamingResponse(gen(), media_type="application/x-ndjson", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/engines")
+async def engines_info():
+    """Available decision engines, their requirements and current availability on this machine."""
+    from .engines import jev_omni, openjev
+    from . import sysinfo
+
+    snap = sysinfo.snapshot()
+    gpu_ok, gpu_why = jev_omni.gpu_ok()
+    free = snap["free_mb"]
+    return {
+        "laya": {"label": "Laya (local)", "kind": "laya", "local": True, "loaded": laya_service.is_loaded(), "ram_mb": laya_service.MIN_FREE_MB_TO_LOAD,
+                 "available": laya_service.is_loaded() or free >= laya_service.MIN_FREE_MB_TO_LOAD, "why": "" if laya_service.is_loaded() or free >= laya_service.MIN_FREE_MB_TO_LOAD else "not enough free RAM",
+                 "license": "see model card", "url": "https://huggingface.co/convaiinnovations/laya"},
+        "jev": {"label": "Jev (TypeSafe, via OpenRouter)", "kind": "jev", "local": False, "available": bool(get_openrouter_key()) or bool(openrouter.get_typesafe_key()),
+                "why": "" if (get_openrouter_key() or openrouter.get_typesafe_key()) else "needs an OpenRouter or TypeSafe key", "url": "https://openrouter.ai/typesafe/jev-1.13"},
+        "openjev": {"label": "openjev (local, open weights)", "kind": "openjev", "local": True, "loaded": openjev.is_loaded(), "license": "MIT", "url": "https://huggingface.co/AlexWortega/openjev",
+                    "variants": {k: {**v, "available": free >= v["ram_mb"] or (gpu_ok and (snap["gpus"][0]["total_mb"] if snap["gpus"] else 0) >= v["vram_mb"])} for k, v in openjev.VARIANTS.items()},
+                    "available": True},
+        "jev_omni": {"label": "Jev-Omni (local, 12B multimodal, GPU)", "kind": "jev_omni", "local": True, "loaded": jev_omni.is_loaded(), "license": "Apache-2.0",
+                     "url": "https://huggingface.co/akhilaaa3/Jev-Omni", "available": gpu_ok, "why": gpu_why, "vram_mb": jev_omni.VRAM_MB},
+        "free_mb": free,
+    }
 
 
 @app.get("/api/openrouter/models")
@@ -873,8 +919,8 @@ async def set_prefs(body: PrefsUpdate):
     """Non-secret preferences: JSON-preparer model and decision engine."""
     eng = body.decision_engine
     if eng is not None:
-        if eng.get("kind") not in ("laya", "jev"):
-            raise HTTPException(400, "decision_engine.kind must be laya or jev")
+        if eng.get("kind") not in ("laya", "jev", "openjev", "jev_omni"):
+            raise HTTPException(400, "decision_engine.kind must be laya, jev, openjev or jev_omni")
         eng = {"kind": eng["kind"], "model": (eng.get("model") or None)}
     secrets_store.set_prefs(openrouter_model=body.openrouter_model, decision_engine=eng)
     return {"ok": True, "openrouter_model": get_openrouter_model(), "decision_engine": get_decision_engine()}
