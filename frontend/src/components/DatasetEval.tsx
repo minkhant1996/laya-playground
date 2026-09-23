@@ -411,7 +411,6 @@ export default function DatasetEval({
   const COMPARE_OPTIONS: { key: string; label: string; engine: Engine }[] = [
     { key: "laya", label: "Laya (local)", engine: { kind: "laya" } },
     { key: "jev:jev-1.13", label: "Jev jev-1.13 (OpenRouter)", engine: { kind: "jev", model: "jev-1.13" } },
-    { key: "jev:jev-latest", label: "Jev jev-latest (OpenRouter)", engine: { kind: "jev", model: "jev-latest" } },
     { key: "openjev:qwen3.5-0.8b-nli-v2s-long", label: "openjev 0.8B (local)", engine: { kind: "openjev", model: "qwen3.5-0.8b-nli-v2s-long" } },
     { key: "openjev:qwen3.5-4b-nli-v2", label: "openjev 4B v2 (local)", engine: { kind: "openjev", model: "qwen3.5-4b-nli-v2" } },
     { key: "jev_omni", label: "Jev-Omni (local GPU)", engine: { kind: "jev_omni" } },

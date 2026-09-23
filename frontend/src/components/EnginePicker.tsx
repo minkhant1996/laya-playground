@@ -50,7 +50,7 @@ export default function EnginePicker({ value, onChange, compact }: Props) {
         <div className="row" style={{ marginTop: 4 }}>
           <select value={value.model ?? 'jev-1.13'} onChange={(e) => onChange({ kind: 'jev', model: e.target.value })} style={{ maxWidth: 200 }}>
             <option value="jev-1.13">jev-1.13</option>
-            <option value="jev-latest">jev-latest</option>
+            <option value="jev-latest">jev-latest (alias, currently the same weights as 1.13)</option>
           </select>
           {!compact && <span className="small">Runs through your OpenRouter key ($0.042 / 1M input tokens); falls back to a TypeSafe key.</span>}
         </div>

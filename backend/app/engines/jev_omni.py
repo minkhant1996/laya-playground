@@ -20,7 +20,19 @@ def gpu_ok() -> tuple[bool, str]:
         import torch
 
         if not torch.cuda.is_available():
-            return False, "Jev-Omni needs an NVIDIA GPU with CUDA (~24 GB VRAM); PyTorch reports no usable CUDA device on this machine."
+            hint = ""
+            try:
+                import subprocess
+
+                r = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
+                                   capture_output=True, text=True, timeout=3)
+                if r.returncode == 0 and r.stdout.strip():
+                    gpu = r.stdout.strip().splitlines()[0]
+                    hint = (f" A GPU is present ({gpu}) but this PyTorch build (CUDA {torch.version.cuda}) "
+                            "cannot use the installed driver: install a PyTorch wheel matching your driver, or update the driver.")
+            except Exception:
+                pass
+            return False, (f"Jev-Omni needs an NVIDIA GPU with CUDA and about {VRAM_MB / 1024:.0f} GB of VRAM." + hint)
         free, total = torch.cuda.mem_get_info(0)
         if total / 2**20 < VRAM_MB * 0.9:
             return False, f"Jev-Omni needs about {VRAM_MB / 1024:.0f} GB VRAM; this GPU has {total / 2**30:.0f} GB."
