@@ -261,6 +261,8 @@ export interface EvalHistoryEntry {
   avg_ms: number | null
   avg_ms_b: number | null
   question_type: string | null
+  models?: number
+  labels?: string[]
 }
 
 export interface EvalHistoryFull extends EvalHistoryEntry {
@@ -268,6 +270,7 @@ export interface EvalHistoryFull extends EvalHistoryEntry {
   result_b: EvalResult | null
   label_a: string | null
   label_b: string | null
+  entries?: { label: string; result: EvalResult }[]
 }
 
 export interface SystemInfo {

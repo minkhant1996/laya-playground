@@ -127,7 +127,7 @@ export const api = {
   learnSession: (id: string) => req<{ id: string; title: string; messages: LearnMsg[] }>(`/learn/sessions/${id}`),
   deleteLearnSession: (id: string) => req<{ ok: boolean }>(`/learn/sessions/${id}`, { method: 'DELETE' }),
   deleteAllLearnSessions: () => req<{ ok: boolean; deleted: number }>('/learn/sessions', { method: 'DELETE' }),
-  evalSave: (body: { kind: 'eval' | 'compare'; title: string; dataset: string; engine: string; result: EvalResult; result_b?: EvalResult | null; label_a?: string; label_b?: string }) =>
+  evalSave: (body: { kind: 'eval' | 'compare'; title: string; dataset: string; engine: string; result: EvalResult; result_b?: EvalResult | null; label_a?: string; label_b?: string; entries?: { label: string; result: EvalResult }[] }) =>
     req<EvalHistoryEntry>('/evals', { method: 'POST', body: JSON.stringify(body) }),
   evals: () => req<EvalHistoryEntry[]>('/evals'),
   evalGet: (id: string) => req<EvalHistoryFull>(`/evals/${id}`),

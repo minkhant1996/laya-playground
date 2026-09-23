@@ -11,6 +11,7 @@ import type {
   Engine,
   EvalResult,
   EvalRow,
+  EnginesInfo,
   EvalHistoryEntry,
   EvalPlan,
   InspectResult,
@@ -21,14 +22,6 @@ import type {
 } from "../types";
 
 type Mode = "preset" | "hf" | "upload" | "kaggle" | "saved";
-
-function engineLabelFromRouting(m: string): string {
-  if (m.startsWith("jev:")) return `Jev (${m.slice(4)})`;
-  if (m.startsWith("openjev:"))
-    return `openjev ${m.slice(8).replace("qwen3.5-", "").replace("-nli", "")}`;
-  if (m === "jev-omni") return "Jev-Omni";
-  return `Laya (${m})`;
-}
 
 export default function DatasetEval({
   aiEnabled,
@@ -55,10 +48,9 @@ export default function DatasetEval({
   const [usePlan, setUsePlan] = useState(true);
   const [planSource, setPlanSource] = useState<"saved" | "new" | null>(null);
   const [refreshCriteria, setRefreshCriteria] = useState(false);
-  const [compare, setCompare] = useState<{
-    a: EvalResult;
-    b: EvalResult;
-  } | null>(null);
+  const [compare, setCompare] = useState<
+    { label: string; result: EvalResult }[] | null
+  >(null);
   const [history, setHistory] = useState<EvalHistoryEntry[]>([]);
   const [historyOpen, setHistoryOpen] = useState(() => {
     try {
@@ -157,8 +149,14 @@ export default function DatasetEval({
   async function openHistory(id: string) {
     try {
       const h = await api.evalGet(id);
-      if (h.kind === "compare" && h.result_b) {
-        setCompare({ a: h.result, b: h.result_b });
+      if (h.kind === "compare" && (h.entries?.length ?? 0) >= 2) {
+        setCompare(h.entries!);
+        setResult(null);
+      } else if (h.kind === "compare" && h.result_b) {
+        setCompare([
+          { label: h.label_a ?? "A", result: h.result },
+          { label: h.label_b ?? "B", result: h.result_b },
+        ]);
         setResult(null);
       } else {
         setCompare(null);
@@ -409,39 +407,64 @@ export default function DatasetEval({
     return r;
   };
 
-  const [compareWith, setCompareWith] = useState<Engine>({
-    kind: "jev",
-    model: "jev-1.13",
-  });
+  // ---- multi-model comparison: tick two or more engines
+  const COMPARE_OPTIONS: { key: string; label: string; engine: Engine }[] = [
+    { key: "laya", label: "Laya (local)", engine: { kind: "laya" } },
+    { key: "jev:jev-1.13", label: "Jev jev-1.13 (OpenRouter)", engine: { kind: "jev", model: "jev-1.13" } },
+    { key: "jev:jev-latest", label: "Jev jev-latest (OpenRouter)", engine: { kind: "jev", model: "jev-latest" } },
+    { key: "openjev:qwen3.5-0.8b-nli-v2s-long", label: "openjev 0.8B (local)", engine: { kind: "openjev", model: "qwen3.5-0.8b-nli-v2s-long" } },
+    { key: "openjev:qwen3.5-4b-nli-v2", label: "openjev 4B v2 (local)", engine: { kind: "openjev", model: "qwen3.5-4b-nli-v2" } },
+    { key: "jev_omni", label: "Jev-Omni (local GPU)", engine: { kind: "jev_omni" } },
+  ];
+  const [enginesInfo, setEnginesInfo] = useState<EnginesInfo | null>(null);
+  const [comparePick, setComparePick] = useState<string[]>(["laya", "jev:jev-1.13"]);
+  useEffect(() => {
+    api.engines().then(setEnginesInfo).catch(() => undefined);
+  }, []);
+
+  function optionAvailable(key: string): { ok: boolean; why: string } {
+    if (!enginesInfo) return { ok: true, why: "" };
+    if (key === "laya") return { ok: enginesInfo.laya.available, why: enginesInfo.laya.why };
+    if (key.startsWith("jev:")) return { ok: enginesInfo.jev.available, why: enginesInfo.jev.why };
+    if (key === "jev_omni") return { ok: enginesInfo.jev_omni.available, why: enginesInfo.jev_omni.why };
+    const v = enginesInfo.openjev.variants?.[key.split(":")[1]];
+    return { ok: v ? v.available : true, why: v && !v.available ? "not enough memory for this variant" : "" };
+  }
+
   async function compareModels() {
     setCompare(null);
-    const a0 = engine;
-    const b0 = compareWith;
-    setCompareStage(`1/2 · ${engineLabel(a0)}`);
-    const a = await runWith(a0);
-    if (!a) {
-      setCompareStage("");
+    const picked = COMPARE_OPTIONS.filter((o) => comparePick.includes(o.key));
+    if (picked.length < 2) {
+      setError("Tick at least two models to compare.");
       return;
     }
-    setCompareStage(`2/2 · ${engineLabel(b0)}`);
-    const b = await runWith(b0);
-    setCompareStage("");
-    if (b) {
-      setCompare({ a, b });
-      api
-        .evalSave({
-          kind: "compare",
-          title: `${sourceLabel()} · ${engineLabel(a0)} ${(a.accuracy * 100).toFixed(1)}% vs ${engineLabel(b0)} ${(b.accuracy * 100).toFixed(1)}% (${a.n})`,
-          dataset: sourceLabel(),
-          engine: `${engineLabel(a0)} vs ${engineLabel(b0)}`,
-          result: a,
-          result_b: b,
-          label_a: engineLabel(a0),
-          label_b: engineLabel(b0),
-        })
-        .then(loadHistory)
-        .catch(() => undefined);
+    const out: { label: string; result: EvalResult }[] = [];
+    for (let i = 0; i < picked.length; i++) {
+      setCompareStage(`${i + 1}/${picked.length} · ${picked[i].label}`);
+      const r = await runWith(picked[i].engine);
+      if (!r) {
+        setCompareStage("");
+        return;
+      }
+      out.push({ label: picked[i].label, result: r });
     }
+    setCompareStage("");
+    setCompare(out);
+    const best = out.reduce((a, b) => (a.result.accuracy >= b.result.accuracy ? a : b));
+    api
+      .evalSave({
+        kind: "compare",
+        title: `${sourceLabel()} · ${out.length} models · best ${best.label} ${(best.result.accuracy * 100).toFixed(1)}% (${out[0].result.n})`,
+        dataset: sourceLabel(),
+        engine: out.map((o) => o.label).join(" vs "),
+        result: out[0].result,
+        result_b: out[1]?.result ?? null,
+        label_a: out[0].label,
+        label_b: out[1]?.label,
+        entries: out,
+      })
+      .then(loadHistory)
+      .catch(() => undefined);
   }
 
   useEffect(() => {
@@ -964,6 +987,38 @@ export default function DatasetEval({
             )}
           </div>
           {plan && usePlan && <PlanEditor plan={plan} onChange={updatePlan} />}
+        <div style={{ marginTop: 10 }}>
+          <div className="small" style={{ marginBottom: 4 }}>
+            Compare these models — tick two or more; they all run on the same samples with the same question
+          </div>
+          <div className="chips">
+            {COMPARE_OPTIONS.map((o) => {
+              const av = optionAvailable(o.key);
+              const on = comparePick.includes(o.key);
+              return (
+                <button
+                  key={o.key}
+                  className={`chip ${on ? "on" : ""}`}
+                  disabled={!av.ok && !on}
+                  title={av.ok ? o.label : av.why}
+                  onClick={() =>
+                    setComparePick((p) =>
+                      p.includes(o.key) ? p.filter((x) => x !== o.key) : [...p, o.key],
+                    )
+                  }
+                >
+                  {on ? "☑" : "☐"} {o.label}
+                  {!av.ok && <span className="small"> · unavailable</span>}
+                </button>
+              );
+            })}
+          </div>
+          <div className="small" style={{ marginTop: 4 }}>
+            {comparePick.length < 2
+              ? "Pick at least two."
+              : `${comparePick.length} selected · takes about ${comparePick.length}× a single evaluation.`}
+          </div>
+        </div>
           <div className="row">
             {(mode === "preset" || mode === "hf") && (
               <>
@@ -1074,7 +1129,7 @@ export default function DatasetEval({
             </button>
             <button
               className="ghost"
-              disabled={busy || !ready}
+              disabled={busy || !ready || comparePick.length < 2}
               onClick={compareModels}
               title={
                 notReadyWhy ||
@@ -1083,31 +1138,7 @@ export default function DatasetEval({
             >
               {compareStage ? `Comparing ${compareStage}` : "⚖ Compare with…"}
             </button>
-            <select
-              value={`${compareWith.kind}:${compareWith.model ?? ""}`}
-              onChange={(e) => {
-                const [kind, model] = e.target.value.split(":");
-                setCompareWith({
-                  kind: kind as Engine["kind"],
-                  model: model || undefined,
-                });
-              }}
-              style={{ width: 230 }}
-              title="Second engine for the comparison"
-            >
-              <option value="laya:">Laya (local)</option>
-              <option value="jev:jev-1.13">Jev jev-1.13 (OpenRouter)</option>
-              <option value="jev:jev-latest">
-                Jev jev-latest (OpenRouter)
-              </option>
-              <option value="openjev:qwen3.5-0.8b-nli-v2s-long">
-                openjev 0.8B (local)
-              </option>
-              <option value="openjev:qwen3.5-4b-nli-v2">
-                openjev 4B v2 (local)
-              </option>
-              <option value="jev_omni:">Jev-Omni (local GPU)</option>
-            </select>
+            <span className="small">tick models below →</span>
             {busy && (
               <button
                 className="ghost"
@@ -1235,14 +1266,7 @@ export default function DatasetEval({
           {error && <div className="error">{error}</div>}
         </section>
 
-        {compare && (
-          <CompareView
-            a={compare.a}
-            b={compare.b}
-            labelA={engineLabelFromRouting(compare.a.routing?.model ?? "")}
-            labelB={engineLabelFromRouting(compare.b.routing?.model ?? "")}
-          />
-        )}
+        {compare && <CompareView entries={compare} />}
         {result && !compare && (
           <section className="panel" style={{ marginTop: 16 }}>
             <div className="metrics">

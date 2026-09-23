@@ -40,7 +40,8 @@ def list_all() -> list[dict[str, Any]]:
     for p in DIR.glob("*.json"):
         try:
             e = json.loads(p.read_text())
-            out.append({k: e.get(k) for k in ("id", "kind", "title", "created", "dataset", "engine", "n", "accuracy", "accuracy_b", "avg_ms", "avg_ms_b", "question_type")})
+            out.append({k: e.get(k) for k in ("id", "kind", "title", "created", "dataset", "engine", "n", "accuracy",
+                                              "accuracy_b", "avg_ms", "avg_ms_b", "question_type", "models", "labels")})
         except Exception:
             continue
     return sorted(out, key=lambda e: -(e.get("created") or 0))

@@ -33,8 +33,10 @@ text. FastAPI + scikit backend, Vite + React + TypeScript frontend, Docker ready
   effective time per sample (Jev requests run 6 in parallel), live RAM / VRAM while Laya runs, latest rows,
   Stop button. Results table with actual / predicted / confidence / time and a green–red correct badge;
   per-label accuracy; MAE for score questions; peak RAM / VRAM of the run.
-- **Compare Laya vs Jev** on the same samples: accuracy, speed, agreement, both-right / only-one-right,
-  per-row and per-label tables.
+- **Compare any number of models** on the same samples: tick two or more engines and each runs the
+  identical question and criteria. Reports the most accurate and fastest, how often all of them agree,
+  how many samples none or only one got right, plus per-model accuracy, latency, confidence, peak
+  RAM/VRAM and cost, with per-row and per-label tables.
 - Every run and comparison is kept in a **History** column (left, minimizable) and can be reopened or deleted.
 
 **Learn** – a documentation agent restricted to `backend/knowledge-hub/`
@@ -54,7 +56,7 @@ text. FastAPI + scikit backend, Vite + React + TypeScript frontend, Docker ready
 | openjev 0.8B / 4B v2 / 35B-A3B | local CPU/GPU | ~2.5 / ~10 / ~75 GB | typed questions mapped onto NLI entailment ("The correct answer is: …"); ~1.8 s per call for 0.8B on CPU |
 | Jev-Omni | local NVIDIA GPU | ~24 GB VRAM, ~24 GB download | one call per question; multimodal in the model, text used here |
 
-The **Compare with…** button runs any two engines on the same samples.
+The **Compare** button runs every ticked engine on the same samples, from two up to all of them.
 
 **Settings**
 - OpenRouter key (verified, then stored encrypted; never returned to the browser), optional TypeSafe key

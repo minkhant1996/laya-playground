@@ -183,9 +183,10 @@ class EvalSaveRequest(BaseModel):
     dataset: str = ""
     engine: str = ""
     result: dict[str, Any]
-    result_b: dict[str, Any] | None = None
+    result_b: dict[str, Any] | None = None          # legacy two-model shape
     label_a: str | None = None
     label_b: str | None = None
+    entries: list[dict[str, Any]] | None = None     # [{label, result}] for 2+ models
 
 
 @app.post("/api/evals")
@@ -193,11 +194,15 @@ async def eval_save(req: EvalSaveRequest):
     from . import evals
 
     r, rb = req.result, req.result_b or {}
+    entries = req.entries or ([{"label": req.label_a or "A", "result": r}] +
+                              ([{"label": req.label_b or "B", "result": req.result_b}] if req.result_b else []))
     return evals.save({
         "kind": req.kind, "title": req.title, "dataset": req.dataset, "engine": req.engine,
         "n": r.get("n"), "accuracy": r.get("accuracy"), "avg_ms": (r.get("extra_metrics") or {}).get("avg_query_ms"),
         "accuracy_b": rb.get("accuracy"), "avg_ms_b": (rb.get("extra_metrics") or {}).get("avg_query_ms"),
-        "question_type": r.get("question_type"), "result": r, "result_b": req.result_b, "label_a": req.label_a, "label_b": req.label_b,
+        "models": len(entries), "labels": [e.get("label") for e in entries],
+        "question_type": r.get("question_type"), "result": r, "result_b": req.result_b,
+        "label_a": req.label_a, "label_b": req.label_b, "entries": entries,
     })
 
 
