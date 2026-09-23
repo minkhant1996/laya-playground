@@ -47,7 +47,9 @@ text. FastAPI + scikit backend, Vite + React + TypeScript frontend, Docker ready
   for several languages, translated once and cached for the rest; a background job can pre-translate all).
 - Learn sessions are saved and deletable like chats.
 
-**Decision engines** (Settings default, overridable per chat / eval; `GET /api/engines` reports availability)
+**Decision engines** (Settings default, overridable per chat / eval). `GET /api/engines` reports what
+this machine can actually run, and engines that cannot run here are hidden rather than shown greyed
+out — a one-line link reveals them with the reason.
 
 | Engine | Runs | Needs | Notes |
 |---|---|---|---|

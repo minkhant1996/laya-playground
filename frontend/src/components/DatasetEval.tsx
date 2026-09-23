@@ -417,6 +417,7 @@ export default function DatasetEval({
   ];
   const [enginesInfo, setEnginesInfo] = useState<EnginesInfo | null>(null);
   const [comparePick, setComparePick] = useState<string[]>(["laya", "jev:jev-1.13"]);
+  const [showUnavailable, setShowUnavailable] = useState(false);
   useEffect(() => {
     api.engines().then(setEnginesInfo).catch(() => undefined);
   }, []);
@@ -429,6 +430,10 @@ export default function DatasetEval({
     const v = enginesInfo.openjev.variants?.[key.split(":")[1]];
     return { ok: v ? v.available : true, why: v && !v.available ? "not enough memory for this variant" : "" };
   }
+
+  const hiddenCount = COMPARE_OPTIONS.filter(
+    (o) => !optionAvailable(o.key).ok && !comparePick.includes(o.key),
+  ).length;
 
   async function compareModels() {
     setCompare(null);
@@ -991,7 +996,7 @@ export default function DatasetEval({
             Compare these models — tick two or more; they all run on the same samples with the same question
           </div>
           <div className="chips">
-            {COMPARE_OPTIONS.map((o) => {
+            {COMPARE_OPTIONS.filter((o) => optionAvailable(o.key).ok || comparePick.includes(o.key) || showUnavailable).map((o) => {
               const av = optionAvailable(o.key);
               const on = comparePick.includes(o.key);
               return (
@@ -1016,6 +1021,22 @@ export default function DatasetEval({
             {comparePick.length < 2
               ? "Pick at least two."
               : `${comparePick.length} selected · takes about ${comparePick.length}× a single evaluation.`}
+            {hiddenCount > 0 && !showUnavailable && (
+              <>
+                {" · "}
+                <button className="chip" style={{ padding: "0 7px", fontSize: 11 }} onClick={() => setShowUnavailable(true)}>
+                  {hiddenCount} hidden: cannot run on this machine
+                </button>
+              </>
+            )}
+            {showUnavailable && (
+              <>
+                {" · "}
+                <button className="chip" style={{ padding: "0 7px", fontSize: 11 }} onClick={() => setShowUnavailable(false)}>
+                  hide unavailable
+                </button>
+              </>
+            )}
           </div>
         </div>
           <div className="row">

@@ -22,6 +22,7 @@ export function engineLabel(e: Engine): string {
 /** Which model answers the typed questions. */
 export default function EnginePicker({ value, onChange, compact }: Props) {
   const [info, setInfo] = useState<EnginesInfo | null>(cache)
+  const [showAll, setShowAll] = useState(false)
   useEffect(() => {
     api
       .engines()
@@ -32,12 +33,21 @@ export default function EnginePicker({ value, onChange, compact }: Props) {
       .catch(() => undefined)
   }, [])
   const gb = (mb: number) => `${(mb / 1024).toFixed(0)} GB`
-  const Opt = ({ kind, label, available, why, onPick }: { kind: Engine['kind']; label: string; available: boolean; why?: string; onPick: () => void }) => (
-    <label title={why || label} style={{ opacity: available ? 1 : 0.55 }}>
-      <input type="radio" checked={value.kind === kind} onChange={onPick} /> {label}
-      {!available && why && <span className="small"> · {why.length > 60 ? why.slice(0, 58) + '…' : why}</span>}
-    </label>
-  )
+  let hidden = 0
+  const Opt = ({ kind, label, available, why, onPick }: { kind: Engine['kind']; label: string; available: boolean; why?: string; onPick: () => void }) => {
+    // An engine that cannot run here is hidden rather than shown greyed out, unless it is the
+    // current selection or the user asked to see everything.
+    if (!available && !showAll && value.kind !== kind) {
+      hidden += 1
+      return null
+    }
+    return (
+      <label title={why || label} style={{ opacity: available ? 1 : 0.55 }}>
+        <input type="radio" checked={value.kind === kind} onChange={onPick} /> {label}
+        {!available && why && <span className="small"> · {why.length > 60 ? why.slice(0, 58) + '…' : why}</span>}
+      </label>
+    )
+  }
   return (
     <div>
       <div className="radio">
@@ -45,6 +55,16 @@ export default function EnginePicker({ value, onChange, compact }: Props) {
         <Opt kind="jev" label="Jev (typesafe/jev-1.13 via OpenRouter)" available={info?.jev.available ?? true} why={info?.jev.why} onPick={() => onChange({ kind: 'jev', model: 'jev-1.13' })} />
         <Opt kind="openjev" label="openjev (local, MIT)" available={info?.openjev.available ?? true} onPick={() => onChange({ kind: 'openjev', model: value.kind === 'openjev' ? value.model : 'qwen3.5-0.8b-nli-v2s-long' })} />
         <Opt kind="jev_omni" label="Jev-Omni (local GPU, multimodal 12B)" available={info?.jev_omni.available ?? false} why={info?.jev_omni.why} onPick={() => onChange({ kind: 'jev_omni' })} />
+        {hidden > 0 && !showAll && (
+          <button className="chip" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => setShowAll(true)}>
+            {hidden} hidden: cannot run here
+          </button>
+        )}
+        {showAll && (
+          <button className="chip" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => setShowAll(false)}>
+            hide unavailable
+          </button>
+        )}
       </div>
       {value.kind === 'jev' && (
         <div className="row" style={{ marginTop: 4 }}>
