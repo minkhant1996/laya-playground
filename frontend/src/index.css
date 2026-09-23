@@ -145,3 +145,47 @@ table.aligned th:not(:first-child), table.aligned td:not(:first-child) { text-al
 .modal.confirm { width: 95%; max-width: 440px; }
 @media (min-width: 768px) { .modal.confirm { width: 440px; } }
 button.primary.danger { background: var(--bad); }
+
+/* ---- chips: small pill buttons used for suggestions, tick boxes and inline actions.
+   These were relying on the browser's default button styling, which renders a light grey
+   face with light text and is unreadable on a dark background. ---- */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip {
+  background: #171c26;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.chip:hover:not(:disabled) { border-color: var(--accent); background: #1b2230; }
+.chip.on {
+  background: rgba(108, 140, 255, .2);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.chip:disabled { opacity: .45; cursor: not-allowed; }
+.chip .small { color: var(--muted); }
+.chip.on .small { color: #cfd8ff; }
+a.chip { text-decoration: none; display: inline-block; }
+
+/* small inline tag (question type, session kind, dataset kind) */
+.kind {
+  display: inline-block;
+  font-size: 10.5px;
+  letter-spacing: .02em;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: #262b36;
+  color: #b7becd;
+  margin-right: 4px;
+}
+.kind.bad { background: rgba(255, 107, 107, .16); color: #ff9c9c; }
+
+/* the suggestion row in chat: full-width readable pills */
+.suggest .chip { text-align: left; max-width: 100%; white-space: normal; }
