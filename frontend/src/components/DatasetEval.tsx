@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import EnginePicker, { engineLabel } from "./EnginePicker";
 import EvalTable from "./EvalTable";
 import PlanEditor from "./PlanEditor";
 import CompareView from "./CompareView";
@@ -26,7 +25,6 @@ type Mode = "preset" | "hf" | "upload" | "kaggle" | "saved";
 export default function DatasetEval({
   aiEnabled,
   defaultEngine,
-  typesafeReady,
 }: {
   aiEnabled: boolean;
   defaultEngine: Engine;
@@ -105,10 +103,12 @@ export default function DatasetEval({
   const [offset, setOffset] = useState(0);
   const [useAi, setUseAi] = useState(true);
   const [shortlist, setShortlist] = useState(0);
-  const [result, setResult] = useState<EvalResult | null>(null);
+  // finished single-model runs; Evaluate with several ticked models adds one entry per model
+  const [runs, setRuns] = useState<{ label: string; result: EvalResult }[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [engine, setEngine] = useState<Engine>(defaultEngine);
+  const [runningEngine, setRunningEngine] = useState<Engine | null>(null);
+  const [evalStage, setEvalStage] = useState("");
   const [status, setStatus] = useState("");
   const [live, setLive] = useState<{
     i: number;
@@ -124,10 +124,6 @@ export default function DatasetEval({
   const [liveRows, setLiveRows] = useState<EvalRow[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const { confirm, dialog } = useConfirm();
-  useEffect(() => {
-    setEngine(defaultEngine);
-  }, [defaultEngine]);
-
   useEffect(() => {
     api
       .datasets()
@@ -151,16 +147,16 @@ export default function DatasetEval({
       const h = await api.evalGet(id);
       if (h.kind === "compare" && (h.entries?.length ?? 0) >= 2) {
         setCompare(h.entries!);
-        setResult(null);
+        setRuns([]);
       } else if (h.kind === "compare" && h.result_b) {
         setCompare([
           { label: h.label_a ?? "A", result: h.result },
           { label: h.label_b ?? "B", result: h.result_b },
         ]);
-        setResult(null);
+        setRuns([]);
       } else {
         setCompare(null);
-        setResult(h.result);
+        setRuns([{ label: h.engine ?? "", result: h.result }]);
       }
       setLive(null);
       setError("");
@@ -317,7 +313,7 @@ export default function DatasetEval({
     }
     setError("");
     setBusy(true);
-    setResult(null);
+    setRunningEngine(eng);
     let out: EvalResult | null = null;
     setLive({ i: 0, n: limit, accuracy: 0, elapsed: 0, eta: 0 });
     setLiveRows([]);
@@ -372,7 +368,6 @@ export default function DatasetEval({
             setLiveRows((r) => [ev.row, ...r].slice(0, 12));
           } else if (ev.type === "done") {
             out = ev.result;
-            setResult(ev.result);
             setStatus("done");
             loadLib();
           } else if (ev.type === "error") setError(ev.message);
@@ -389,24 +384,6 @@ export default function DatasetEval({
     return out;
   }
 
-  const run = async () => {
-    setCompare(null);
-    const r = await runWith(engine);
-    if (r) {
-      api
-        .evalSave({
-          kind: "eval",
-          title: `${sourceLabel()} · ${engineLabel(engine)} · ${(r.accuracy * 100).toFixed(1)}% (${r.n})`,
-          dataset: sourceLabel(),
-          engine: engineLabel(engine),
-          result: r,
-        })
-        .then(loadHistory)
-        .catch(() => undefined);
-    }
-    return r;
-  };
-
   // ---- multi-model comparison: tick two or more engines
   const COMPARE_OPTIONS: { key: string; label: string; engine: Engine }[] = [
     { key: "laya", label: "Laya (local)", engine: { kind: "laya" } },
@@ -416,7 +393,16 @@ export default function DatasetEval({
     { key: "jev_omni", label: "Jev-Omni (local GPU)", engine: { kind: "jev_omni" } },
   ];
   const [enginesInfo, setEnginesInfo] = useState<EnginesInfo | null>(null);
-  const [comparePick, setComparePick] = useState<string[]>(["laya", "jev:jev-1.13"]);
+  const keyOf = (e: Engine) =>
+    e.kind === "jev"
+      ? "jev:jev-1.13"
+      : e.kind === "openjev"
+        ? `openjev:${e.model ?? "qwen3.5-0.8b-nli-v2s-long"}`
+        : e.kind;
+  const [comparePick, setComparePick] = useState<string[]>(() => [keyOf(defaultEngine)]);
+  useEffect(() => {
+    setComparePick((p) => (p.length ? p : [keyOf(defaultEngine)]));
+  }, [defaultEngine]);
   const [showUnavailable, setShowUnavailable] = useState(false);
   useEffect(() => {
     api.engines().then(setEnginesInfo).catch(() => undefined);
@@ -435,8 +421,39 @@ export default function DatasetEval({
     (o) => !optionAvailable(o.key).ok && !comparePick.includes(o.key),
   ).length;
 
+  // Evaluate: every ticked model runs on its own, one after another, each with its own result + history entry
+  async function run() {
+    setCompare(null);
+    setRuns([]);
+    const picked = COMPARE_OPTIONS.filter((o) => comparePick.includes(o.key));
+    if (!picked.length) {
+      setError("Tick at least one model.");
+      return;
+    }
+    const done: { label: string; result: EvalResult }[] = [];
+    for (let i = 0; i < picked.length; i++) {
+      setEvalStage(picked.length > 1 ? `${i + 1}/${picked.length} · ${picked[i].label}` : "");
+      const r = await runWith(picked[i].engine);
+      if (!r) break;
+      done.push({ label: picked[i].label, result: r });
+      setRuns([...done]);
+      api
+        .evalSave({
+          kind: "eval",
+          title: `${sourceLabel()} · ${picked[i].label} · ${(r.accuracy * 100).toFixed(1)}% (${r.n})`,
+          dataset: sourceLabel(),
+          engine: picked[i].label,
+          result: r,
+        })
+        .then(loadHistory)
+        .catch(() => undefined);
+    }
+    setEvalStage("");
+  }
+
   async function compareModels() {
     setCompare(null);
+    setRuns([]);
     const picked = COMPARE_OPTIONS.filter((o) => comparePick.includes(o.key));
     if (picked.length < 2) {
       setError("Tick at least two models to compare.");
@@ -993,7 +1010,7 @@ export default function DatasetEval({
           {plan && usePlan && <PlanEditor plan={plan} onChange={updatePlan} />}
         <div style={{ marginTop: 10 }}>
           <div className="small" style={{ marginBottom: 4 }}>
-            Compare these models — tick two or more; they all run on the same samples with the same question
+            Models — tick one to evaluate it; tick two or more to evaluate each separately or compare them
           </div>
           <div className="chips">
             {COMPARE_OPTIONS.filter((o) => optionAvailable(o.key).ok || comparePick.includes(o.key) || showUnavailable).map((o) => {
@@ -1018,9 +1035,11 @@ export default function DatasetEval({
             })}
           </div>
           <div className="small" style={{ marginTop: 4 }}>
-            {comparePick.length < 2
-              ? "Pick at least two."
-              : `${comparePick.length} selected · takes about ${comparePick.length}× a single evaluation.`}
+            {comparePick.length === 0
+              ? "Tick at least one model."
+              : comparePick.length === 1
+                ? "1 selected · tick another to enable Compare."
+                : `${comparePick.length} selected · Evaluate runs each on its own; Compare shows them side by side. Takes about ${comparePick.length}× a single evaluation.`}
             {hiddenCount > 0 && !showUnavailable && (
               <>
                 {" · "}
@@ -1141,11 +1160,22 @@ export default function DatasetEval({
             )}
             <button
               className="primary"
-              disabled={busy || !ready}
+              disabled={busy || !ready || comparePick.length === 0}
               onClick={run}
-              title={notReadyWhy || "Evaluate with the selected decision model"}
+              title={
+                notReadyWhy ||
+                (comparePick.length > 1
+                  ? "Evaluate each ticked model separately, one after another"
+                  : "Evaluate the ticked model")
+              }
             >
-              {busy && !compareStage ? "Evaluating…" : "Evaluate"}
+              {busy && !compareStage
+                ? evalStage
+                  ? `Evaluating ${evalStage}`
+                  : "Evaluating…"
+                : comparePick.length > 1
+                  ? `Evaluate ${comparePick.length} separately`
+                  : "Evaluate"}
             </button>
             <button
               className="ghost"
@@ -1153,12 +1183,15 @@ export default function DatasetEval({
               onClick={compareModels}
               title={
                 notReadyWhy ||
-                "Run the same samples through the selected engine and the one chosen on the right, then compare accuracy, speed and agreement"
+                (comparePick.length < 2
+                  ? "Tick two or more models to compare"
+                  : "Run the same samples through every ticked model, then compare accuracy, speed and agreement")
               }
             >
-              {compareStage ? `Comparing ${compareStage}` : "⚖ Compare with…"}
+              {compareStage
+                ? `Comparing ${compareStage}`
+                : `⚖ Compare${comparePick.length > 1 ? ` ${comparePick.length}` : ""}`}
             </button>
-            <span className="small">tick models below →</span>
             {busy && (
               <button
                 className="ghost"
@@ -1172,18 +1205,6 @@ export default function DatasetEval({
                 {notReadyWhy}
               </span>
             )}
-          </div>
-          <div style={{ marginTop: 10 }}>
-            <div className="small" style={{ marginBottom: 2 }}>
-              Decision model
-            </div>
-            <EnginePicker
-              value={engine}
-              onChange={setEngine}
-              compact
-              openrouterReady={aiEnabled}
-              typesafeReady={typesafeReady}
-            />
           </div>
           {textCol === "__all__" && (
             <div className="small" style={{ marginTop: 6 }}>
@@ -1262,7 +1283,7 @@ export default function DatasetEval({
                             </b>
                           </span>
                         )}
-                        {!live.mem && engine.kind === "jev" && (
+                        {!live.mem && runningEngine?.kind === "jev" && (
                           <span>
                             RAM <b>—</b> · VRAM <b>—</b>{" "}
                             <span className="small">(cloud)</span>
@@ -1287,8 +1308,10 @@ export default function DatasetEval({
         </section>
 
         {compare && <CompareView entries={compare} />}
-        {result && !compare && (
-          <section className="panel" style={{ marginTop: 16 }}>
+        {!compare &&
+          runs.map(({ label, result }, k) => (
+          <section key={k} className="panel" style={{ marginTop: 16 }}>
+            {runs.length > 1 && <h3 style={{ marginTop: 0 }}>{label}</h3>}
             <div className="metrics">
               <div className="metric">
                 <div className="k">accuracy</div>
@@ -1365,7 +1388,7 @@ export default function DatasetEval({
               <pre>{JSON.stringify(result.per_label, null, 2)}</pre>
             </details>
           </section>
-        )}
+          ))}
       </div>
     </div>
   );
